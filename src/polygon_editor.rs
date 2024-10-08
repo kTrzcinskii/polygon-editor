@@ -192,25 +192,26 @@ impl eframe::App for PolygonEditor {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::SidePanel::right("right_panel")
             .resizable(false)
-            .show(ctx, |ui| {
+            .frame(
                 egui::Frame::none()
-                    .fill(egui::Color32::from_gray(30))
-                    .show(ui, |ui| {
-                        ui.heading("Controls");
-                        ui.separator();
-                        ui.label("Choose line drawing algorithm");
-                        ui.radio_value(
-                            &mut self.line_drawing_algorithm,
-                            LineDrawingAlgorithm::Bresenham,
-                            "Bresenham Algorithm",
-                        );
-                        ui.radio_value(
-                            &mut self.line_drawing_algorithm,
-                            LineDrawingAlgorithm::Bultin,
-                            "Builtin Algorithm",
-                        );
-                        ui.separator();
-                    });
+                    .fill(egui::Color32::from_gray(40))
+                    .inner_margin(egui::Margin::same(10.0)),
+            )
+            .show(ctx, |ui| {
+                ui.heading("Controls");
+                ui.separator();
+                ui.label("Choose line drawing algorithm");
+                ui.radio_value(
+                    &mut self.line_drawing_algorithm,
+                    LineDrawingAlgorithm::Bresenham,
+                    "Bresenham Algorithm",
+                );
+                ui.radio_value(
+                    &mut self.line_drawing_algorithm,
+                    LineDrawingAlgorithm::Bultin,
+                    "Builtin Algorithm",
+                );
+                ui.separator();
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {

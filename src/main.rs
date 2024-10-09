@@ -1,3 +1,4 @@
+mod edge;
 mod polygon_editor;
 
 use polygon_editor::PolygonEditor;

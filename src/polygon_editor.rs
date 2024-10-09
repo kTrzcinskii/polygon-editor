@@ -42,6 +42,33 @@ impl PolygonEditor {
         painter.rect_filled(rect, 0.0, color);
     }
 
+    pub fn edge_contains_point(&self, edge: &Edge, point: &Pos2) -> bool {
+        const TOLERANCE: f32 = 5.0;
+        let start = self.points[edge.start_index];
+        let end = self.points[edge.end_index];
+
+        let dx_p = point.x - start.x;
+        let dy_p = point.y - start.y;
+
+        let dx_e = end.x - start.x;
+        let dy_e = end.y - start.y;
+
+        let squared_edge_length = dx_e * dx_e + dy_e * dy_e;
+
+        let cross = dx_p * dy_e - dy_p * dx_e;
+
+        if cross * cross / squared_edge_length > TOLERANCE {
+            return false;
+        }
+
+        let min_x = start.x.min(end.x);
+        let max_x = start.x.max(end.x);
+        let min_y = start.y.min(end.y);
+        let max_y = start.y.max(end.y);
+
+        point.x >= min_x && point.x <= max_x && point.y >= min_y && point.y <= max_y
+    }
+
     fn draw_line_bresenham(
         &self,
         painter: &egui::Painter,

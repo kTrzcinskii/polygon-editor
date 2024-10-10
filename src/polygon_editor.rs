@@ -238,10 +238,16 @@ impl PolygonEditor {
         let mouse_pos = ctx.pointer_hover_pos();
         if let Some(pos) = mouse_pos {
             if ctx.input(|i| i.pointer.button_down(egui::PointerButton::Secondary)) {
+                let mut selected_now = false;
                 for (id, edge) in self.edges.iter().enumerate() {
                     if self.edge_contains_point(edge, &pos) {
-                        self.selected_edge = Some(id)
+                        self.selected_edge = Some(id);
+                        selected_now = true;
+                        break;
                     }
+                }
+                if !selected_now {
+                    self.selected_edge = None;
                 }
             }
         }
@@ -290,11 +296,13 @@ impl PolygonEditor {
                                         println!("Making horizontal");
                                     }
                                     if ui
-                                        .add(egui::Button::new("Add midpoint").rounding(Rounding {
-                                            nw: 0.0,
-                                            ne: 0.0,
-                                            ..Default::default()
-                                        }))
+                                        .add(egui::Button::new("Make vertical").rounding(
+                                            Rounding {
+                                                nw: 0.0,
+                                                ne: 0.0,
+                                                ..Default::default()
+                                            },
+                                        ))
                                         .clicked()
                                     {
                                         println!("Making vertical");

@@ -1,4 +1,4 @@
-use egui::{Color32, Pos2};
+use egui::{Color32, Pos2, Rounding, Vec2};
 
 use crate::edge::Edge;
 
@@ -19,6 +19,8 @@ pub struct PolygonEditor {
     dragged_index: Option<usize>,
     /// Id of point inside points that is currently used to dragg whole polygon
     polygon_dragged_index: Option<usize>,
+    /// Id of edge currently selected for context menu
+    selected_edge: Option<usize>,
 }
 
 impl PolygonEditor {
@@ -207,6 +209,82 @@ impl PolygonEditor {
             }
         }
     }
+
+    pub fn handle_selecting_edge(&mut self, ctx: &egui::Context) {
+        let mouse_pos = ctx.pointer_hover_pos();
+        if let Some(pos) = mouse_pos {
+            if ctx.input(|i| i.pointer.button_down(egui::PointerButton::Secondary)) {
+                for (id, edge) in self.edges.iter().enumerate() {
+                    if self.edge_contains_point(edge, &pos) {
+                        self.selected_edge = Some(id)
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn show_context_menu_for_selected_edge(&self, ctx: &egui::Context, ui: &egui::Ui) {
+        const CONTEXT_MENU_MIN_WDITH: f32 = 120.0;
+        if let Some(selected_id) = self.selected_edge {
+            let edge = &self.edges[selected_id];
+
+            let container_pos = self.get_middle_point(edge.start_index, edge.end_index)
+                - Vec2::new(
+                    CONTEXT_MENU_MIN_WDITH / 2.0,
+                    ui.spacing().interact_size.y * 3.0 / 2.0,
+                );
+            egui::containers::Area::new("edge_context_menu".into())
+                .fixed_pos(container_pos)
+                .show(ctx, |ui| {
+                    egui::Frame::popup(ui.style())
+                        .outer_margin(0.0)
+                        .inner_margin(0.0)
+                        .fill(Color32::TRANSPARENT)
+                        .show(ui, |ui| {
+                            ui.set_min_width(CONTEXT_MENU_MIN_WDITH);
+                            ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
+                            ui.with_layout(
+                                egui::Layout::top_down_justified(egui::Align::LEFT),
+                                |ui| {
+                                    if ui
+                                        .add(egui::Button::new("Add midpoint").rounding(Rounding {
+                                            sw: 0.0,
+                                            se: 0.0,
+                                            ..Default::default()
+                                        }))
+                                        .clicked()
+                                    {
+                                        println!("Adding midpoint");
+                                    }
+                                    if ui
+                                        .add(
+                                            egui::Button::new("Make horizontal")
+                                                .rounding(Rounding::ZERO),
+                                        )
+                                        .clicked()
+                                    {
+                                        println!("Making horizontal");
+                                    }
+                                    if ui
+                                        .add(egui::Button::new("Add midpoint").rounding(Rounding {
+                                            nw: 0.0,
+                                            ne: 0.0,
+                                            ..Default::default()
+                                        }))
+                                        .clicked()
+                                    {
+                                        println!("Making vertical");
+                                    }
+                                },
+                            );
+                        });
+                });
+        }
+    }
+
+    fn get_middle_point(&self, start: usize, end: usize) -> Pos2 {
+        (self.points[start] + self.points[end].to_vec2()) / 2.0
+    }
 }
 
 impl Default for PolygonEditor {
@@ -223,6 +301,7 @@ impl Default for PolygonEditor {
             edges,
             dragged_index: None,
             polygon_dragged_index: None,
+            selected_edge: None,
         }
     }
 }
@@ -266,10 +345,13 @@ impl eframe::App for PolygonEditor {
                 }
             };
             self.draw_points(painter, Color32::DARK_BLUE, 4.0);
-            // ctrl + LMB
+            // ctrl + LMB on point
             self.handle_dragging_polygon(ctx);
-            // LMB
+            // LMB on point
             self.handle_dragging_points(ctx);
+            // RMB on edge
+            self.handle_selecting_edge(ctx);
+            self.show_context_menu_for_selected_edge(ctx, ui);
         });
     }
 }

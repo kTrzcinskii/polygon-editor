@@ -253,7 +253,29 @@ impl PolygonEditor {
         }
     }
 
-    pub fn show_context_menu_for_selected_edge(&self, ctx: &egui::Context, ui: &egui::Ui) {
+    pub fn handle_removing_point(&mut self, ctx: &egui::Context) {
+        if self.points.len() <= 3 {
+            return;
+        }
+        let mouse_pos = ctx.pointer_hover_pos();
+        if let Some(pos) = mouse_pos {
+            if ctx.input(|i| i.pointer.button_down(egui::PointerButton::Primary) && i.modifiers.alt)
+            {
+                let mut id: Option<usize> = None;
+                for (i, point) in self.points.iter().enumerate() {
+                    // Start dragging the point if it's close enough
+                    if (*point - pos).length() < 10.0 {
+                        id = Some(i)
+                    }
+                }
+                if let Some(id) = id {
+                    self.remove_point(id);
+                }
+            }
+        }
+    }
+
+    pub fn show_context_menu_for_selected_edge(&mut self, ctx: &egui::Context, ui: &egui::Ui) {
         const CONTEXT_MENU_MIN_WDITH: f32 = 120.0;
         if let Some(selected_id) = self.selected_edge {
             let edge = &self.edges[selected_id];
@@ -284,7 +306,8 @@ impl PolygonEditor {
                                         }))
                                         .clicked()
                                     {
-                                        println!("Adding midpoint");
+                                        self.add_point_on_edge(selected_id);
+                                        self.selected_edge = None;
                                     }
                                     if ui
                                         .add(
@@ -316,6 +339,62 @@ impl PolygonEditor {
 
     fn get_middle_point(&self, start: usize, end: usize) -> Pos2 {
         (self.points[start] + self.points[end].to_vec2()) / 2.0
+    }
+
+    fn add_point_on_edge(&mut self, edge_index: usize) {
+        let edge = self.edges.remove(edge_index);
+        let id_smaller = edge.start_index.min(edge.end_index);
+        let id_bigger = edge.start_index.max(edge.end_index);
+        let new_point = self.get_middle_point(id_smaller, id_bigger);
+        self.points.push(new_point);
+        let first_edge = Edge::new(id_smaller, self.points.len() - 1);
+        let second_edge = Edge::new(self.points.len() - 1, id_bigger);
+        self.edges.push(first_edge);
+        self.edges.push(second_edge);
+    }
+
+    fn remove_point(&mut self, point_index: usize) {
+        self.points.remove(point_index);
+        let mut first: Option<usize> = None;
+        let mut second: Option<usize> = None;
+        for (id, edge) in self.edges.iter_mut().enumerate() {
+            if edge.start_index == point_index || edge.end_index == point_index {
+                if first.is_none() {
+                    first = Some(id);
+                } else {
+                    second = Some(id);
+                }
+            }
+            if edge.start_index > point_index {
+                edge.start_index -= 1;
+            }
+            if edge.end_index > point_index {
+                edge.end_index -= 1;
+            }
+        }
+        match (first, second) {
+            // Those should never happen (?)
+            (None, None) => eprintln!("Trying to remove point that belongs to only one edge"),
+            (None, Some(_)) => eprintln!("Trying to remove point that belongs to only one edge"),
+            (Some(_), None) => eprintln!("Trying to remove point that belongs to only one edge"),
+            (Some(first_id), Some(second_id)) => {
+                let first = self.edges.remove(first_id);
+                // -1 becasue we already removed one item
+                let second = self.edges.remove(second_id - 1);
+                let from_first = if first.start_index == point_index {
+                    first.end_index
+                } else {
+                    first.start_index
+                };
+                let from_second = if second.start_index == point_index {
+                    second.end_index
+                } else {
+                    second.start_index
+                };
+                let new_edge = Edge::new(from_first, from_second);
+                self.edges.push(new_edge);
+            }
+        }
     }
 }
 
@@ -362,6 +441,12 @@ impl eframe::App for PolygonEditor {
                     "Builtin Algorithm",
                 );
                 ui.separator();
+                ui.vertical_centered(|ui| {
+                    if ui.button("Restore default state").clicked() {
+                        *self = Self::default();
+                    }
+                });
+                ui.separator();
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -379,6 +464,8 @@ impl eframe::App for PolygonEditor {
             self.draw_points(painter, Color32::DARK_BLUE, 4.0);
             // ctrl + LMB on point
             self.handle_dragging_polygon(ctx);
+            // alt + LMB on point
+            self.handle_removing_point(ctx);
             // LMB on point
             self.handle_dragging_points(ctx);
             // RMB on edge

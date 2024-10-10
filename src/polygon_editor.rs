@@ -30,11 +30,25 @@ impl PolygonEditor {
         }
     }
 
-    pub fn draw_polygon_builtin(&self, painter: &egui::Painter, color: Color32, width: f32) {
-        for edge in &self.edges {
+    pub fn draw_polygon_builtin(
+        &self,
+        painter: &egui::Painter,
+        color: Color32,
+        special_color: Color32,
+        width: f32,
+    ) {
+        for (id, edge) in self.edges.iter().enumerate() {
+            let current_color = if id == self.selected_edge.unwrap_or(usize::MAX) {
+                special_color
+            } else {
+                color
+            };
             painter.line_segment(
                 [self.points[edge.start_index], self.points[edge.end_index]],
-                egui::Stroke { color, width },
+                egui::Stroke {
+                    color: current_color,
+                    width,
+                },
             );
         }
     }
@@ -146,12 +160,22 @@ impl PolygonEditor {
         }
     }
 
-    pub fn draw_polygon_bresenham(&self, painter: &egui::Painter, color: Color32) {
+    pub fn draw_polygon_bresenham(
+        &self,
+        painter: &egui::Painter,
+        color: Color32,
+        special_color: Color32,
+    ) {
         const WIDTH: f32 = 1.0;
-        for edge in &self.edges {
+        for (id, edge) in self.edges.iter().enumerate() {
+            let current_color = if id == self.selected_edge.unwrap_or(usize::MAX) {
+                special_color
+            } else {
+                color
+            };
             self.draw_line_bresenham(
                 painter,
-                color,
+                current_color,
                 self.points[edge.start_index],
                 self.points[edge.end_index],
                 WIDTH,
@@ -338,10 +362,10 @@ impl eframe::App for PolygonEditor {
             // Important: Order here matters!
             match self.line_drawing_algorithm {
                 LineDrawingAlgorithm::Bultin => {
-                    self.draw_polygon_builtin(painter, Color32::LIGHT_GREEN, 1.0)
+                    self.draw_polygon_builtin(painter, Color32::LIGHT_GREEN, Color32::ORANGE, 1.0)
                 }
                 LineDrawingAlgorithm::Bresenham => {
-                    self.draw_polygon_bresenham(painter, Color32::YELLOW)
+                    self.draw_polygon_bresenham(painter, Color32::YELLOW, Color32::ORANGE)
                 }
             };
             self.draw_points(painter, Color32::DARK_BLUE, 4.0);

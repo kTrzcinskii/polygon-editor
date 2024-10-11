@@ -60,9 +60,31 @@ impl PolygonEditor {
 
     // TODO: i think its not working when x or y of start and end are equal
     pub fn edge_contains_point(&self, edge: &Edge, point: &Pos2) -> bool {
-        const TOLERANCE: f32 = 15.0;
+        const TOLERANCE: f32 = 20.0;
+        const TOLERANCE_SAME_DIM: f32 = 5.0;
         let start = self.points[edge.start_index];
         let end = self.points[edge.end_index];
+
+        let min_x = start.x.min(end.x);
+        let max_x = start.x.max(end.x);
+        let min_y = start.y.min(end.y);
+        let max_y = start.y.max(end.y);
+
+        if start.x == end.x
+            && (point.x - start.x).abs() <= TOLERANCE_SAME_DIM
+            && point.y >= min_y
+            && point.y <= max_y
+        {
+            return true;
+        }
+
+        if start.y == end.y
+            && (point.y - start.y).abs() <= TOLERANCE_SAME_DIM
+            && point.x >= min_x
+            && point.x <= max_x
+        {
+            return true;
+        }
 
         let dx_p = point.x - start.x;
         let dy_p = point.y - start.y;
@@ -77,11 +99,6 @@ impl PolygonEditor {
         if cross * cross / squared_edge_length > TOLERANCE {
             return false;
         }
-
-        let min_x = start.x.min(end.x);
-        let max_x = start.x.max(end.x);
-        let min_y = start.y.min(end.y);
-        let max_y = start.y.max(end.y);
 
         point.x >= min_x && point.x <= max_x && point.y >= min_y && point.y <= max_y
     }

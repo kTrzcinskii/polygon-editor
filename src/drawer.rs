@@ -1,18 +1,18 @@
 use egui::{Color32, Pos2};
 
-use crate::edge::Edge;
+use crate::{edge::Edge, point::Point};
 
 pub struct Drawer;
 
 impl Drawer {
-    pub fn draw_points(points: &[Pos2], painter: &egui::Painter, color: Color32, width: f32) {
+    pub fn draw_points(points: &[Point], painter: &egui::Painter, color: Color32, width: f32) {
         for point in points {
-            painter.circle(*point, width, color, egui::Stroke { color, width });
+            painter.circle(*point.pos(), width, color, egui::Stroke { color, width });
         }
     }
 
     pub fn draw_polygon_builtin(
-        points: &[Pos2],
+        points: &[Point],
         edges: &[Edge],
         selected_edge: Option<usize>,
         painter: &egui::Painter,
@@ -27,7 +27,10 @@ impl Drawer {
                 color
             };
             painter.line_segment(
-                [points[edge.start_index], points[edge.end_index]],
+                [
+                    *points[edge.start_index].pos(),
+                    *points[edge.end_index].pos(),
+                ],
                 egui::Stroke {
                     color: current_color,
                     width,
@@ -37,7 +40,7 @@ impl Drawer {
     }
 
     pub fn draw_polygon_bresenham(
-        points: &[Pos2],
+        points: &[Point],
         edges: &[Edge],
         selected_edge: Option<usize>,
         painter: &egui::Painter,
@@ -64,14 +67,14 @@ impl Drawer {
     fn draw_line_bresenham(
         painter: &egui::Painter,
         color: Color32,
-        start: Pos2,
-        end: Pos2,
+        start: Point,
+        end: Point,
         width: f32,
     ) {
-        let x1 = start.x as i32;
-        let y1 = start.y as i32;
-        let x2 = end.x as i32;
-        let y2 = end.y as i32;
+        let x1 = start.pos().x as i32;
+        let y1 = start.pos().y as i32;
+        let x2 = end.pos().x as i32;
+        let y2 = end.pos().y as i32;
 
         let dx = x2 - x1;
         let dy = y2 - y1;

@@ -1,9 +1,6 @@
 use egui::{Color32, Pos2, Rounding, Vec2};
 
-use crate::{
-    drawer::Drawer,
-    edge::{self, Edge, EdgePointType},
-};
+use crate::{drawer::Drawer, edge::Edge, point::Point};
 
 #[derive(PartialEq)]
 enum LineDrawingAlgorithm {
@@ -15,7 +12,7 @@ pub struct PolygonEditor {
     /// Which line drawing algorithm to use
     line_drawing_algorithm: LineDrawingAlgorithm,
     /// List of all polygon points
-    points: Vec<Pos2>,
+    points: Vec<Point>,
     /// List of all polygon edges
     edges: Vec<Edge>,
     /// Id of point inside points that is currently being dragged by user
@@ -27,81 +24,6 @@ pub struct PolygonEditor {
 }
 
 impl PolygonEditor {
-    pub fn edge_contains_point(&self, edge: &Edge, point: &Pos2) -> bool {
-        const TOLERANCE: f32 = 20.0;
-        const TOLERANCE_SAME_DIM: f32 = 5.0;
-        let start = self.points[edge.start_index];
-        let end = self.points[edge.end_index];
-
-        let min_x = start.x.min(end.x);
-        let max_x = start.x.max(end.x);
-        let min_y = start.y.min(end.y);
-        let max_y = start.y.max(end.y);
-
-        if start.x == end.x
-            && (point.x - start.x).abs() <= TOLERANCE_SAME_DIM
-            && point.y >= min_y
-            && point.y <= max_y
-        {
-            return true;
-        }
-
-        if start.y == end.y
-            && (point.y - start.y).abs() <= TOLERANCE_SAME_DIM
-            && point.x >= min_x
-            && point.x <= max_x
-        {
-            return true;
-        }
-
-        let dx_p = point.x - start.x;
-        let dy_p = point.y - start.y;
-
-        let dx_e = end.x - start.x;
-        let dy_e = end.y - start.y;
-
-        let squared_edge_length = dx_e * dx_e + dy_e * dy_e;
-
-        let cross = dx_p * dy_e - dy_p * dx_e;
-
-        if cross * cross / squared_edge_length > TOLERANCE {
-            return false;
-        }
-
-        point.x >= min_x && point.x <= max_x && point.y >= min_y && point.y <= max_y
-    }
-
-    fn move_point(&mut self, point_index: usize, new_position: Pos2) {
-        let delta = new_position - self.points[point_index];
-        self.points[point_index] = new_position;
-        let edges = self.find_point_adjacent_edges(point_index);
-        match edges {
-            (None, None) => eprintln!("Trying to move point that belongs to no edge"),
-            (None, Some(_)) => eprintln!("Trying to move point that belongs to only one edge"),
-            (Some(_), None) => eprintln!("Trying to move point that belongs to only one edge"),
-            (Some(first), Some(second)) => {
-                self.adjust_moved_point_edge(point_index, first, &delta);
-                self.adjust_moved_point_edge(point_index, second, &delta);
-            }
-        }
-    }
-
-    fn adjust_moved_point_edge(&mut self, point_index: usize, edge_index: usize, delta: &Vec2) {
-        if let Some(restriction) = self.edges[edge_index].restriction() {
-            match restriction {
-                edge::EdgeRestriction::Horizontal => {
-                    let other_point = self.edges[edge_index].take_other_point(point_index);
-                    self.points[other_point].y += delta.y;
-                }
-                edge::EdgeRestriction::Vertical => {
-                    let other_point = self.edges[edge_index].take_other_point(point_index);
-                    self.points[other_point].x += delta.x;
-                }
-                edge::EdgeRestriction::Width(_) => todo!(),
-            }
-        }
-    }
-
     pub fn handle_dragging_points(&mut self, ctx: &egui::Context) {
         let mouse_pos = ctx.pointer_interact_pos();
         if let Some(pos) = mouse_pos {
@@ -109,11 +31,11 @@ impl PolygonEditor {
             if ctx.input(|i| i.pointer.button_down(egui::PointerButton::Primary)) {
                 // If already dragging then move point
                 if let Some(index) = self.dragged_index {
-                    self.move_point(index, pos);
+                    Point::update_position(index, pos, &mut self.points, &self.edges);
                 } else {
                     for (i, point) in self.points.iter().enumerate() {
                         // Start dragging the point if it's close enough
-                        if (*point - pos).length() < 10.0 {
+                        if (*point.pos() - pos).length() < 10.0 {
                             self.dragged_index = Some(i);
                         }
                     }
@@ -137,14 +59,12 @@ impl PolygonEditor {
                 // If already dragging then move all points
                 if let Some(index) = self.polygon_dragged_index {
                     let previous_pos = self.points[index];
-                    let diff = pos - previous_pos;
-                    for point in &mut self.points {
-                        *point += diff;
-                    }
+                    let diff = pos - *previous_pos.pos();
+                    Point::update_position_all(&mut self.points, diff);
                 } else {
                     for (i, point) in self.points.iter().enumerate() {
                         // Start dragging the point if it's close enough
-                        if (*point - pos).length() < 10.0 {
+                        if (*point.pos() - pos).length() < 10.0 {
                             self.polygon_dragged_index = Some(i);
                         }
                     }
@@ -161,7 +81,7 @@ impl PolygonEditor {
             if ctx.input(|i| i.pointer.button_down(egui::PointerButton::Secondary)) {
                 let mut selected_now = false;
                 for (id, edge) in self.edges.iter().enumerate() {
-                    if self.edge_contains_point(edge, &pos) {
+                    if edge.contains_point(&self.points, &pos) {
                         self.selected_edge = Some(id);
                         selected_now = true;
                         break;
@@ -184,13 +104,12 @@ impl PolygonEditor {
             {
                 let mut id: Option<usize> = None;
                 for (i, point) in self.points.iter().enumerate() {
-                    // Start dragging the point if it's close enough
-                    if (*point - pos).length() < 10.0 {
+                    if (*point.pos() - pos).length() < 10.0 {
                         id = Some(i)
                     }
                 }
                 if let Some(id) = id {
-                    self.remove_point(id);
+                    Point::remove_at(&mut self.points, &mut self.edges, id);
                 }
             }
         }
@@ -202,16 +121,18 @@ impl PolygonEditor {
             let edge = &self.edges[selected_id];
 
             let neighbour_has_vertical_or_horizontal_restriction =
-                self.neighours_have_vertical_or_horizontal_restriction(selected_id);
+                Edge::neighours_have_vertical_or_horizontal_restriction(&self.edges, selected_id);
 
             let can_add_restriction = !edge.has_restriction();
             let number_of_buttons = if can_add_restriction { 3 } else { 2 };
 
-            let container_pos = self.get_middle_point(edge.start_index, edge.end_index)
-                - Vec2::new(
-                    CONTEXT_MENU_MIN_WDITH / 2.0,
-                    ui.spacing().interact_size.y * number_of_buttons as f32 / 2.0,
-                );
+            let container_pos = Point::get_middle_point(
+                &self.points[edge.start_index],
+                &self.points[edge.end_index],
+            ) - Vec2::new(
+                CONTEXT_MENU_MIN_WDITH / 2.0,
+                ui.spacing().interact_size.y * number_of_buttons as f32 / 2.0,
+            );
             egui::containers::Area::new("edge_context_menu".into())
                 .fixed_pos(container_pos)
                 .show(ctx, |ui| {
@@ -233,7 +154,11 @@ impl PolygonEditor {
                                         }))
                                         .clicked()
                                     {
-                                        self.add_point_on_edge(selected_id);
+                                        Point::add_on_edge(
+                                            &mut self.points,
+                                            &mut self.edges,
+                                            selected_id,
+                                        );
                                         self.selected_edge = None;
                                     }
                                     if can_add_restriction {
@@ -246,8 +171,11 @@ impl PolygonEditor {
                                             .clicked()
                                         {
                                             self.edges[selected_id].apply_horizontal_restriction();
-                                            self.points[self.edges[selected_id].start_index].y =
-                                                self.points[self.edges[selected_id].end_index].y;
+                                            self.points[self.edges[selected_id].start_index]
+                                                .pos_mut()
+                                                .y = self.points[self.edges[selected_id].end_index]
+                                                .pos()
+                                                .y;
                                             self.selected_edge = None;
                                         }
                                         if ui
@@ -264,8 +192,11 @@ impl PolygonEditor {
                                             .clicked()
                                         {
                                             self.edges[selected_id].apply_vertical_restriction();
-                                            self.points[self.edges[selected_id].start_index].x =
-                                                self.points[self.edges[selected_id].end_index].x;
+                                            self.points[self.edges[selected_id].start_index]
+                                                .pos_mut()
+                                                .x = self.points[self.edges[selected_id].end_index]
+                                                .pos()
+                                                .x;
                                             self.selected_edge = None;
                                         }
                                     } else if ui
@@ -287,139 +218,14 @@ impl PolygonEditor {
                 });
         }
     }
-
-    fn get_middle_point(&self, start: usize, end: usize) -> Pos2 {
-        (self.points[start] + self.points[end].to_vec2()) / 2.0
-    }
-
-    fn add_point_on_edge(&mut self, edge_index: usize) {
-        let edge = self.edges.remove(edge_index);
-        let id_smaller = edge.start_index.min(edge.end_index);
-        let id_bigger = edge.start_index.max(edge.end_index);
-        let new_point = self.get_middle_point(id_smaller, id_bigger);
-        self.points.push(new_point);
-        let first_edge = Edge::new(id_smaller, self.points.len() - 1);
-        let second_edge = Edge::new(self.points.len() - 1, id_bigger);
-        self.edges.push(first_edge);
-        self.edges.push(second_edge);
-    }
-
-    fn remove_point(&mut self, point_index: usize) {
-        self.points.remove(point_index);
-        let adjacent_edges = self.find_point_adjacent_edges(point_index);
-        for edge in self.edges.iter_mut() {
-            if edge.start_index > point_index {
-                edge.start_index -= 1;
-            }
-            if edge.end_index > point_index {
-                edge.end_index -= 1;
-            }
-        }
-        match adjacent_edges {
-            // Those should never happen (?)
-            (None, None) => eprintln!("Trying to remove point that belongs to no edge"),
-            (None, Some(_)) => eprintln!("Trying to remove point that belongs to only one edge"),
-            (Some(_), None) => eprintln!("Trying to remove point that belongs to only one edge"),
-            (Some(first_id), Some(second_id)) => {
-                let first = self.edges.remove(first_id);
-                // -1 becasue we already removed one item
-                let second = self.edges.remove(second_id - 1);
-                let from_first = if first.start_index == point_index {
-                    first.end_index
-                } else {
-                    first.start_index
-                };
-                let from_second = if second.start_index == point_index {
-                    second.end_index
-                } else {
-                    second.start_index
-                };
-                let new_edge = Edge::new(from_first, from_second);
-                self.edges.push(new_edge);
-            }
-        }
-    }
-
-    fn find_point_adjacent_edges(&self, point_index: usize) -> (Option<usize>, Option<usize>) {
-        let mut first: Option<usize> = None;
-        let mut second: Option<usize> = None;
-        for (id, edge) in self.edges.iter().enumerate() {
-            if edge.start_index == point_index || edge.end_index == point_index {
-                if first.is_none() {
-                    first = Some(id);
-                } else {
-                    second = Some(id);
-                }
-            }
-        }
-        (first, second)
-    }
-
-    fn find_edge_adjacent_edges(&self, edge_index: usize) -> (Option<usize>, Option<usize>) {
-        (
-            self.find_edge_adjacent_edge_with_common_point(edge_index, EdgePointType::Start),
-            self.find_edge_adjacent_edge_with_common_point(edge_index, EdgePointType::End),
-        )
-    }
-
-    fn find_edge_adjacent_edge_with_common_point(
-        &self,
-        edge_index: usize,
-        point: EdgePointType,
-    ) -> Option<usize> {
-        let point_index = match point {
-            EdgePointType::Start => self.edges[edge_index].start_index,
-            EdgePointType::End => self.edges[edge_index].end_index,
-        };
-        let adjacents = self.find_point_adjacent_edges(point_index);
-
-        match adjacents {
-            (None, None) => {
-                eprintln!("Trying to find adjacent edges with point that belongs to no edge");
-                None
-            }
-            (None, Some(_)) => {
-                eprintln!("Trying to find adjacent edges with point that belongs to only one edge");
-                None
-            }
-            (Some(_), None) => {
-                eprintln!("Trying to find adjacent edges with point that belongs to only one edge");
-                None
-            }
-            (Some(f), Some(s)) => {
-                if f == edge_index {
-                    Some(s)
-                } else {
-                    Some(f)
-                }
-            }
-        }
-    }
-
-    fn neighours_have_vertical_or_horizontal_restriction(&self, edge_index: usize) -> bool {
-        let adjacent_edges = self.find_edge_adjacent_edges(edge_index);
-
-        let first_with_restrictions = if let Some(id) = adjacent_edges.0 {
-            self.edges[id].has_horizontal_or_vertical_restriction()
-        } else {
-            false
-        };
-        let second_with_restrictions = if let Some(id) = adjacent_edges.1 {
-            self.edges[id].has_horizontal_or_vertical_restriction()
-        } else {
-            false
-        };
-
-        first_with_restrictions || second_with_restrictions
-    }
 }
 
 impl Default for PolygonEditor {
     fn default() -> Self {
         let points = vec![
-            Pos2::new(50.0, 50.0),
-            Pos2::new(100.0, 50.0),
-            Pos2::new(75.0, 100.0),
+            Point::new(Pos2::new(50.0, 50.0)),
+            Point::new(Pos2::new(100.0, 50.0)),
+            Point::new(Pos2::new(75.0, 100.0)),
         ];
         let edges = Edge::from_points(&points);
         Self {

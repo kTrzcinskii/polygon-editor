@@ -1,5 +1,6 @@
 mod drawer;
 mod edge;
+mod point;
 mod polygon_editor;
 
 use polygon_editor::PolygonEditor;

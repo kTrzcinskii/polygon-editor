@@ -58,7 +58,6 @@ impl PolygonEditor {
         painter.rect_filled(rect, 0.0, color);
     }
 
-    // TODO: i think its not working when x or y of start and end are equal
     pub fn edge_contains_point(&self, edge: &Edge, point: &Pos2) -> bool {
         const TOLERANCE: f32 = 20.0;
         const TOLERANCE_SAME_DIM: f32 = 5.0;
@@ -334,10 +333,13 @@ impl PolygonEditor {
             let neighbour_has_vertical_or_horizontal_restriction =
                 self.neighours_have_vertical_or_horizontal_restriction(selected_id);
 
+            let can_add_restriction = !edge.has_restriction();
+            let number_of_buttons = if can_add_restriction { 3 } else { 2 };
+
             let container_pos = self.get_middle_point(edge.start_index, edge.end_index)
                 - Vec2::new(
                     CONTEXT_MENU_MIN_WDITH / 2.0,
-                    ui.spacing().interact_size.y * 3.0 / 2.0,
+                    ui.spacing().interact_size.y * number_of_buttons as f32 / 2.0,
                 );
             egui::containers::Area::new("edge_context_menu".into())
                 .fixed_pos(container_pos)
@@ -363,33 +365,49 @@ impl PolygonEditor {
                                         self.add_point_on_edge(selected_id);
                                         self.selected_edge = None;
                                     }
-                                    if ui
-                                        .add_enabled(
-                                            !neighbour_has_vertical_or_horizontal_restriction,
-                                            egui::Button::new("Make horizontal")
-                                                .rounding(Rounding::ZERO),
-                                        )
-                                        .clicked()
-                                    {
-                                        self.edges[selected_id].apply_horizontal_restriction();
-                                        self.points[self.edges[selected_id].start_index].y =
-                                            self.points[self.edges[selected_id].end_index].y;
-                                        self.selected_edge = None;
-                                    }
-                                    if ui
-                                        .add_enabled(
-                                            !neighbour_has_vertical_or_horizontal_restriction,
-                                            egui::Button::new("Make vertical").rounding(Rounding {
+                                    if can_add_restriction {
+                                        if ui
+                                            .add_enabled(
+                                                !neighbour_has_vertical_or_horizontal_restriction,
+                                                egui::Button::new("Make horizontal")
+                                                    .rounding(Rounding::ZERO),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.edges[selected_id].apply_horizontal_restriction();
+                                            self.points[self.edges[selected_id].start_index].y =
+                                                self.points[self.edges[selected_id].end_index].y;
+                                            self.selected_edge = None;
+                                        }
+                                        if ui
+                                            .add_enabled(
+                                                !neighbour_has_vertical_or_horizontal_restriction,
+                                                egui::Button::new("Make vertical").rounding(
+                                                    Rounding {
+                                                        nw: 0.0,
+                                                        ne: 0.0,
+                                                        ..Default::default()
+                                                    },
+                                                ),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.edges[selected_id].apply_vertical_restriction();
+                                            self.points[self.edges[selected_id].start_index].x =
+                                                self.points[self.edges[selected_id].end_index].x;
+                                            self.selected_edge = None;
+                                        }
+                                    } else if ui
+                                        .add(egui::Button::new("Remove restriction").rounding(
+                                            Rounding {
                                                 nw: 0.0,
                                                 ne: 0.0,
                                                 ..Default::default()
-                                            }),
-                                        )
+                                            },
+                                        ))
                                         .clicked()
                                     {
-                                        self.edges[selected_id].apply_vertical_restriction();
-                                        self.points[self.edges[selected_id].start_index].x =
-                                            self.points[self.edges[selected_id].end_index].x;
+                                        self.edges[selected_id].remove_restriction();
                                         self.selected_edge = None;
                                     }
                                 },

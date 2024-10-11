@@ -1,6 +1,9 @@
 use egui::{Color32, Pos2, Rounding, Vec2};
 
-use crate::edge::{self, Edge, EdgePointType};
+use crate::{
+    drawer::Drawer,
+    edge::{self, Edge, EdgePointType},
+};
 
 #[derive(PartialEq)]
 enum LineDrawingAlgorithm {
@@ -24,40 +27,6 @@ pub struct PolygonEditor {
 }
 
 impl PolygonEditor {
-    pub fn draw_points(&self, painter: &egui::Painter, color: Color32, width: f32) {
-        for point in &self.points {
-            painter.circle(*point, width, color, egui::Stroke { color, width });
-        }
-    }
-
-    pub fn draw_polygon_builtin(
-        &self,
-        painter: &egui::Painter,
-        color: Color32,
-        special_color: Color32,
-        width: f32,
-    ) {
-        for (id, edge) in self.edges.iter().enumerate() {
-            let current_color = if id == self.selected_edge.unwrap_or(usize::MAX) {
-                special_color
-            } else {
-                color
-            };
-            painter.line_segment(
-                [self.points[edge.start_index], self.points[edge.end_index]],
-                egui::Stroke {
-                    color: current_color,
-                    width,
-                },
-            );
-        }
-    }
-
-    fn paint_pixel(&self, painter: &egui::Painter, position: Pos2, width: f32, color: Color32) {
-        let rect = egui::Rect::from_min_size(position, egui::Vec2::new(width, width));
-        painter.rect_filled(rect, 0.0, color);
-    }
-
     pub fn edge_contains_point(&self, edge: &Edge, point: &Pos2) -> bool {
         const TOLERANCE: f32 = 20.0;
         const TOLERANCE_SAME_DIM: f32 = 5.0;
@@ -100,104 +69,6 @@ impl PolygonEditor {
         }
 
         point.x >= min_x && point.x <= max_x && point.y >= min_y && point.y <= max_y
-    }
-
-    fn draw_line_bresenham(
-        &self,
-        painter: &egui::Painter,
-        color: Color32,
-        start: Pos2,
-        end: Pos2,
-        width: f32,
-    ) {
-        let x1 = start.x as i32;
-        let y1 = start.y as i32;
-        let x2 = end.x as i32;
-        let y2 = end.y as i32;
-
-        let dx = x2 - x1;
-        let dy = y2 - y1;
-
-        let abs_dx = dx.abs();
-        let abs_dy = dy.abs();
-
-        let mut x = x1;
-        let mut y = y1;
-
-        self.paint_pixel(
-            painter,
-            Pos2 {
-                x: x as f32,
-                y: y as f32,
-            },
-            width,
-            color,
-        );
-
-        if abs_dx > abs_dy {
-            let mut d = 2 * abs_dy - abs_dx;
-            for _ in 0..abs_dx {
-                x = if dx < 0 { x - 1 } else { x + 1 };
-                if d < 0 {
-                    d += 2 * abs_dy
-                } else {
-                    y = if dy < 0 { y - 1 } else { y + 1 };
-                    d += 2 * abs_dy - 2 * abs_dx;
-                }
-                self.paint_pixel(
-                    painter,
-                    Pos2 {
-                        x: x as f32,
-                        y: y as f32,
-                    },
-                    width,
-                    color,
-                );
-            }
-        } else {
-            let mut d = 2 * abs_dx - abs_dy;
-            for _ in 0..abs_dy {
-                y = if dy < 0 { y - 1 } else { y + 1 };
-                if d < 0 {
-                    d += 2 * abs_dx
-                } else {
-                    x = if dx < 0 { x - 1 } else { x + 1 };
-                    d += 2 * abs_dx - 2 * abs_dy;
-                }
-                self.paint_pixel(
-                    painter,
-                    Pos2 {
-                        x: x as f32,
-                        y: y as f32,
-                    },
-                    width,
-                    color,
-                );
-            }
-        }
-    }
-
-    pub fn draw_polygon_bresenham(
-        &self,
-        painter: &egui::Painter,
-        color: Color32,
-        special_color: Color32,
-    ) {
-        const WIDTH: f32 = 1.0;
-        for (id, edge) in self.edges.iter().enumerate() {
-            let current_color = if id == self.selected_edge.unwrap_or(usize::MAX) {
-                special_color
-            } else {
-                color
-            };
-            self.draw_line_bresenham(
-                painter,
-                current_color,
-                self.points[edge.start_index],
-                self.points[edge.end_index],
-                WIDTH,
-            );
-        }
     }
 
     fn move_point(&mut self, point_index: usize, new_position: Pos2) {
@@ -599,14 +470,25 @@ impl eframe::App for PolygonEditor {
 
             // Important: Order here matters!
             match self.line_drawing_algorithm {
-                LineDrawingAlgorithm::Bultin => {
-                    self.draw_polygon_builtin(painter, Color32::LIGHT_GREEN, Color32::ORANGE, 1.0)
-                }
-                LineDrawingAlgorithm::Bresenham => {
-                    self.draw_polygon_bresenham(painter, Color32::YELLOW, Color32::ORANGE)
-                }
+                LineDrawingAlgorithm::Bultin => Drawer::draw_polygon_builtin(
+                    &self.points,
+                    &self.edges,
+                    self.selected_edge,
+                    painter,
+                    Color32::LIGHT_GREEN,
+                    Color32::ORANGE,
+                    1.0,
+                ),
+                LineDrawingAlgorithm::Bresenham => Drawer::draw_polygon_bresenham(
+                    &self.points,
+                    &self.edges,
+                    self.selected_edge,
+                    painter,
+                    Color32::YELLOW,
+                    Color32::ORANGE,
+                ),
             };
-            self.draw_points(painter, Color32::DARK_BLUE, 4.0);
+            Drawer::draw_points(&self.points, painter, Color32::DARK_BLUE, 4.0);
             // ctrl + LMB on point
             self.handle_dragging_polygon(ctx);
             // alt + LMB on point

@@ -1,6 +1,6 @@
 use egui::{Color32, Pos2, Rounding, Vec2};
 
-use crate::edge::{self, Edge};
+use crate::edge::{self, Edge, EdgePointType};
 
 #[derive(PartialEq)]
 enum LineDrawingAlgorithm {
@@ -206,9 +206,9 @@ impl PolygonEditor {
         self.points[point_index] = new_position;
         let edges = self.find_point_adjacent_edges(point_index);
         match edges {
-            (None, None) => eprintln!("Trying to remove point that belongs to only one edge"),
-            (None, Some(_)) => eprintln!("Trying to remove point that belongs to only one edge"),
-            (Some(_), None) => eprintln!("Trying to remove point that belongs to only one edge"),
+            (None, None) => eprintln!("Trying to move point that belongs to no edge"),
+            (None, Some(_)) => eprintln!("Trying to move point that belongs to only one edge"),
+            (Some(_), None) => eprintln!("Trying to move point that belongs to only one edge"),
             (Some(first), Some(second)) => {
                 self.adjust_moved_point_edge(point_index, first, &delta);
                 self.adjust_moved_point_edge(point_index, second, &delta);
@@ -217,7 +217,7 @@ impl PolygonEditor {
     }
 
     fn adjust_moved_point_edge(&mut self, point_index: usize, edge_index: usize, delta: &Vec2) {
-        if let Some(restriction) = self.edges[edge_index].restriciton() {
+        if let Some(restriction) = self.edges[edge_index].restriction() {
             match restriction {
                 edge::EdgeRestriction::Horizontal => {
                     let other_point = self.edges[edge_index].take_other_point(point_index);
@@ -331,6 +331,9 @@ impl PolygonEditor {
         if let Some(selected_id) = self.selected_edge {
             let edge = &self.edges[selected_id];
 
+            let neighbour_has_vertical_or_horizontal_restriction =
+                self.neighours_have_vertical_or_horizontal_restriction(selected_id);
+
             let container_pos = self.get_middle_point(edge.start_index, edge.end_index)
                 - Vec2::new(
                     CONTEXT_MENU_MIN_WDITH / 2.0,
@@ -360,9 +363,9 @@ impl PolygonEditor {
                                         self.add_point_on_edge(selected_id);
                                         self.selected_edge = None;
                                     }
-                                    // TODO: make it disables when adjacent edge already has any restriciton
                                     if ui
-                                        .add(
+                                        .add_enabled(
+                                            !neighbour_has_vertical_or_horizontal_restriction,
                                             egui::Button::new("Make horizontal")
                                                 .rounding(Rounding::ZERO),
                                         )
@@ -373,16 +376,15 @@ impl PolygonEditor {
                                             self.points[self.edges[selected_id].end_index].y;
                                         self.selected_edge = None;
                                     }
-                                    // TODO: make it disables when adjacent edge already has any restriciton
-
                                     if ui
-                                        .add(egui::Button::new("Make vertical").rounding(
-                                            Rounding {
+                                        .add_enabled(
+                                            !neighbour_has_vertical_or_horizontal_restriction,
+                                            egui::Button::new("Make vertical").rounding(Rounding {
                                                 nw: 0.0,
                                                 ne: 0.0,
                                                 ..Default::default()
-                                            },
-                                        ))
+                                            }),
+                                        )
                                         .clicked()
                                     {
                                         self.edges[selected_id].apply_vertical_restriction();
@@ -426,7 +428,7 @@ impl PolygonEditor {
         }
         match adjacent_edges {
             // Those should never happen (?)
-            (None, None) => eprintln!("Trying to remove point that belongs to only one edge"),
+            (None, None) => eprintln!("Trying to remove point that belongs to no edge"),
             (None, Some(_)) => eprintln!("Trying to remove point that belongs to only one edge"),
             (Some(_), None) => eprintln!("Trying to remove point that belongs to only one edge"),
             (Some(first_id), Some(second_id)) => {
@@ -462,6 +464,64 @@ impl PolygonEditor {
             }
         }
         (first, second)
+    }
+
+    fn find_edge_adjacent_edges(&self, edge_index: usize) -> (Option<usize>, Option<usize>) {
+        (
+            self.find_edge_adjacent_edge_with_common_point(edge_index, EdgePointType::Start),
+            self.find_edge_adjacent_edge_with_common_point(edge_index, EdgePointType::End),
+        )
+    }
+
+    fn find_edge_adjacent_edge_with_common_point(
+        &self,
+        edge_index: usize,
+        point: EdgePointType,
+    ) -> Option<usize> {
+        let point_index = match point {
+            EdgePointType::Start => self.edges[edge_index].start_index,
+            EdgePointType::End => self.edges[edge_index].end_index,
+        };
+        let adjacents = self.find_point_adjacent_edges(point_index);
+
+        match adjacents {
+            (None, None) => {
+                eprintln!("Trying to find adjacent edges with point that belongs to no edge");
+                None
+            }
+            (None, Some(_)) => {
+                eprintln!("Trying to find adjacent edges with point that belongs to only one edge");
+                None
+            }
+            (Some(_), None) => {
+                eprintln!("Trying to find adjacent edges with point that belongs to only one edge");
+                None
+            }
+            (Some(f), Some(s)) => {
+                if f == edge_index {
+                    Some(s)
+                } else {
+                    Some(f)
+                }
+            }
+        }
+    }
+
+    fn neighours_have_vertical_or_horizontal_restriction(&self, edge_index: usize) -> bool {
+        let adjacent_edges = self.find_edge_adjacent_edges(edge_index);
+
+        let first_with_restrictions = if let Some(id) = adjacent_edges.0 {
+            self.edges[id].has_horizontal_or_vertical_restriction()
+        } else {
+            false
+        };
+        let second_with_restrictions = if let Some(id) = adjacent_edges.1 {
+            self.edges[id].has_horizontal_or_vertical_restriction()
+        } else {
+            false
+        };
+
+        first_with_restrictions || second_with_restrictions
     }
 }
 

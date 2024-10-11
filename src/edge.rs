@@ -6,6 +6,11 @@ pub enum EdgeRestriction {
     Width(i32),
 }
 
+pub enum EdgePointType {
+    Start,
+    End,
+}
+
 pub struct Edge {
     /// Index of point that is start of the edge
     pub start_index: usize,
@@ -47,7 +52,14 @@ impl Edge {
         self.restriction.is_some()
     }
 
-    pub fn restriciton(&self) -> &Option<EdgeRestriction> {
+    pub fn has_horizontal_or_vertical_restriction(&self) -> bool {
+        match self.restriction() {
+            Some(res) => matches!(res, EdgeRestriction::Horizontal | EdgeRestriction::Vertical),
+            None => false,
+        }
+    }
+
+    pub fn restriction(&self) -> &Option<EdgeRestriction> {
         &self.restriction
     }
 

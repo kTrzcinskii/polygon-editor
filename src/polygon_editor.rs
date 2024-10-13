@@ -46,7 +46,7 @@ impl PolygonEditor {
         }
     }
 
-    // We are moving whole polygon, so we dont have to check restrictions here
+    // We are moving whole polygon, so we dont have to check constraints here
     // As the relative positions of points is unchanged
     pub fn handle_dragging_polygon(&mut self, ctx: &egui::Context) {
         let mouse_pos = ctx.pointer_interact_pos();
@@ -202,7 +202,7 @@ impl PolygonEditor {
                                             self.selected_edge_start_index = None;
                                         }
                                     } else if ui
-                                        .add(egui::Button::new("Remove restriction").rounding(
+                                        .add(egui::Button::new("Remove constraint").rounding(
                                             Rounding {
                                                 nw: 0.0,
                                                 ne: 0.0,

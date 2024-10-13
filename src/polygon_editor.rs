@@ -117,14 +117,8 @@ impl PolygonEditor {
     pub fn show_context_menu_for_selected_edge(&mut self, ctx: &egui::Context, ui: &egui::Ui) {
         const CONTEXT_MENU_MIN_WDITH: f32 = 120.0;
         if let Some(selected_id) = self.selected_edge_start_index {
-            let neighbour_has_vertical_or_horizontal_restriction =
-                Point::neighour_edges_have_vertical_or_horizontal_restriction(
-                    &self.points,
-                    selected_id,
-                );
-
-            let can_add_restriction = !self.points[selected_id].has_constraint();
-            let number_of_buttons = if can_add_restriction { 4 } else { 2 };
+            let can_add_constraint = !self.points[selected_id].has_constraint();
+            let number_of_buttons = if can_add_constraint { 4 } else { 2 };
 
             let container_pos = Point::get_middle_point(
                 &self.points[selected_id],
@@ -157,10 +151,13 @@ impl PolygonEditor {
                                         Point::add_on_edge(&mut self.points, selected_id);
                                         self.selected_edge_start_index = None;
                                     }
-                                    if can_add_restriction {
+                                    if can_add_constraint {
                                         if ui
                                             .add_enabled(
-                                                !neighbour_has_vertical_or_horizontal_restriction,
+                                                !Point::neighour_edges_have_horizontal_constraint(
+                                                    &self.points,
+                                                    selected_id,
+                                                ),
                                                 egui::Button::new("Make horizontal")
                                                     .rounding(Rounding::ZERO),
                                             )
@@ -175,7 +172,10 @@ impl PolygonEditor {
                                         }
                                         if ui
                                             .add_enabled(
-                                                !neighbour_has_vertical_or_horizontal_restriction,
+                                                !Point::neighour_edges_have_vertical_constraint(
+                                                    &self.points,
+                                                    selected_id,
+                                                ),
                                                 egui::Button::new("Make vertical")
                                                     .rounding(Rounding::ZERO),
                                             )

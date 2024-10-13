@@ -39,9 +39,16 @@ impl Point {
         self.constraint.is_some()
     }
 
-    pub fn has_horizontal_or_vertical_constraint(&self) -> bool {
+    pub fn has_horizontal_constraint(&self) -> bool {
         match self.constraint() {
-            Some(res) => matches!(res, EdgeConstraint::Horizontal | EdgeConstraint::Vertical),
+            Some(res) => matches!(res, EdgeConstraint::Horizontal),
+            None => false,
+        }
+    }
+
+    pub fn has_vertical_constraint(&self) -> bool {
+        match self.constraint() {
+            Some(res) => matches!(res, EdgeConstraint::Vertical),
             None => false,
         }
     }
@@ -194,13 +201,17 @@ impl Point {
         point.x >= min_x && point.x <= max_x && point.y >= min_y && point.y <= max_y
     }
 
-    pub fn neighour_edges_have_vertical_or_horizontal_restriction(
-        points: &[Point],
-        point_index: usize,
-    ) -> bool {
+    pub fn neighour_edges_have_vertical_constraint(points: &[Point], point_index: usize) -> bool {
         let previous_edge_start = Self::get_previous_index(points, point_index);
         let next_edge_start = Self::get_next_index(points, point_index);
-        points[previous_edge_start].has_horizontal_or_vertical_constraint()
-            || points[next_edge_start].has_horizontal_or_vertical_constraint()
+        points[previous_edge_start].has_vertical_constraint()
+            || points[next_edge_start].has_vertical_constraint()
+    }
+
+    pub fn neighour_edges_have_horizontal_constraint(points: &[Point], point_index: usize) -> bool {
+        let previous_edge_start = Self::get_previous_index(points, point_index);
+        let next_edge_start = Self::get_next_index(points, point_index);
+        points[previous_edge_start].has_horizontal_constraint()
+            || points[next_edge_start].has_horizontal_constraint()
     }
 }

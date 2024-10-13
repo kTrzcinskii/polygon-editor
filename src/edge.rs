@@ -5,7 +5,7 @@ use crate::point::Point;
 pub enum EdgeRestriction {
     Horizontal,
     Vertical,
-    Width(i32),
+    ConstWidth,
 }
 
 pub enum EdgePointType {
@@ -77,8 +77,8 @@ impl Edge {
         self.restriction = Some(EdgeRestriction::Vertical);
     }
 
-    pub fn apply_width_restriction(&mut self, width: i32) {
-        self.restriction = Some(EdgeRestriction::Width(width));
+    pub fn apply_width_restriction(&mut self) {
+        self.restriction = Some(EdgeRestriction::ConstWidth);
     }
 
     pub fn contains_point(&self, points: &[Point], point: &Pos2) -> bool {

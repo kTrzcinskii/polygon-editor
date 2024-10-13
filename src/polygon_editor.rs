@@ -124,7 +124,7 @@ impl PolygonEditor {
                 Edge::neighours_have_vertical_or_horizontal_restriction(&self.edges, selected_id);
 
             let can_add_restriction = !edge.has_restriction();
-            let number_of_buttons = if can_add_restriction { 3 } else { 2 };
+            let number_of_buttons = if can_add_restriction { 4 } else { 2 };
 
             let container_pos = Point::get_middle_point(
                 &self.points[edge.start_index],
@@ -181,13 +181,8 @@ impl PolygonEditor {
                                         if ui
                                             .add_enabled(
                                                 !neighbour_has_vertical_or_horizontal_restriction,
-                                                egui::Button::new("Make vertical").rounding(
-                                                    Rounding {
-                                                        nw: 0.0,
-                                                        ne: 0.0,
-                                                        ..Default::default()
-                                                    },
-                                                ),
+                                                egui::Button::new("Make vertical")
+                                                    .rounding(Rounding::ZERO),
                                             )
                                             .clicked()
                                         {
@@ -197,6 +192,19 @@ impl PolygonEditor {
                                                 .x = self.points[self.edges[selected_id].end_index]
                                                 .pos()
                                                 .x;
+                                            self.selected_edge = None;
+                                        }
+                                        if ui
+                                            .add(egui::Button::new("Make constant width").rounding(
+                                                Rounding {
+                                                    nw: 0.0,
+                                                    ne: 0.0,
+                                                    ..Default::default()
+                                                },
+                                            ))
+                                            .clicked()
+                                        {
+                                            self.edges[selected_id].apply_width_restriction();
                                             self.selected_edge = None;
                                         }
                                     } else if ui

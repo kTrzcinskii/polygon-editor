@@ -66,7 +66,7 @@ impl Point {
                     let other_point = edges[edge_index].take_other_point(point_index);
                     points[other_point].pos_mut().x += delta.x;
                 }
-                edge::EdgeRestriction::Width(_) => todo!(),
+                edge::EdgeRestriction::ConstWidth => todo!(),
             }
         }
     }

@@ -1,6 +1,6 @@
 use egui::{Color32, Pos2, Rounding, Vec2};
 
-use crate::{drawer::Drawer, edge::Edge, point::Point};
+use crate::{drawer::Drawer, point::Point};
 
 #[derive(PartialEq)]
 enum LineDrawingAlgorithm {
@@ -12,15 +12,14 @@ pub struct PolygonEditor {
     /// Which line drawing algorithm to use
     line_drawing_algorithm: LineDrawingAlgorithm,
     /// List of all polygon points
+    /// At the same time, each point is the start of the edge and the next one is the end of it
     points: Vec<Point>,
-    /// List of all polygon edges
-    edges: Vec<Edge>,
     /// Id of point inside points that is currently being dragged by user
     dragged_index: Option<usize>,
     /// Id of point inside points that is currently used to dragg whole polygon
     polygon_dragged_index: Option<usize>,
-    /// Id of edge currently selected for context menu
-    selected_edge: Option<usize>,
+    /// Id of edge (meaning id of the first vertex of it) currently selected for context menu
+    selected_edge_start_index: Option<usize>,
 }
 
 impl PolygonEditor {
@@ -31,7 +30,7 @@ impl PolygonEditor {
             if ctx.input(|i| i.pointer.button_down(egui::PointerButton::Primary)) {
                 // If already dragging then move point
                 if let Some(index) = self.dragged_index {
-                    Point::update_position(index, pos, &mut self.points, &self.edges);
+                    Point::update_position(&mut self.points, index, pos);
                 } else {
                     for (i, point) in self.points.iter().enumerate() {
                         // Start dragging the point if it's close enough
@@ -80,15 +79,15 @@ impl PolygonEditor {
         if let Some(pos) = mouse_pos {
             if ctx.input(|i| i.pointer.button_down(egui::PointerButton::Secondary)) {
                 let mut selected_now = false;
-                for (id, edge) in self.edges.iter().enumerate() {
-                    if edge.contains_point(&self.points, &pos) {
-                        self.selected_edge = Some(id);
+                for id in 0..self.points.len() {
+                    if Point::contains_point(&self.points, id, &pos) {
+                        self.selected_edge_start_index = Some(id);
                         selected_now = true;
                         break;
                     }
                 }
                 if !selected_now {
-                    self.selected_edge = None;
+                    self.selected_edge_start_index = None;
                 }
             }
         }
@@ -109,7 +108,7 @@ impl PolygonEditor {
                     }
                 }
                 if let Some(id) = id {
-                    Point::remove_at(&mut self.points, &mut self.edges, id);
+                    Point::remove_at(&mut self.points, id);
                 }
             }
         }
@@ -117,18 +116,19 @@ impl PolygonEditor {
 
     pub fn show_context_menu_for_selected_edge(&mut self, ctx: &egui::Context, ui: &egui::Ui) {
         const CONTEXT_MENU_MIN_WDITH: f32 = 120.0;
-        if let Some(selected_id) = self.selected_edge {
-            let edge = &self.edges[selected_id];
-
+        if let Some(selected_id) = self.selected_edge_start_index {
             let neighbour_has_vertical_or_horizontal_restriction =
-                Edge::neighours_have_vertical_or_horizontal_restriction(&self.edges, selected_id);
+                Point::neighour_edges_have_vertical_or_horizontal_restriction(
+                    &self.points,
+                    selected_id,
+                );
 
-            let can_add_restriction = !edge.has_restriction();
+            let can_add_restriction = !self.points[selected_id].has_constraint();
             let number_of_buttons = if can_add_restriction { 4 } else { 2 };
 
             let container_pos = Point::get_middle_point(
-                &self.points[edge.start_index],
-                &self.points[edge.end_index],
+                &self.points[selected_id],
+                &self.points[Point::get_next_index(&self.points, selected_id)],
             ) - Vec2::new(
                 CONTEXT_MENU_MIN_WDITH / 2.0,
                 ui.spacing().interact_size.y * number_of_buttons as f32 / 2.0,
@@ -154,12 +154,8 @@ impl PolygonEditor {
                                         }))
                                         .clicked()
                                     {
-                                        Point::add_on_edge(
-                                            &mut self.points,
-                                            &mut self.edges,
-                                            selected_id,
-                                        );
-                                        self.selected_edge = None;
+                                        Point::add_on_edge(&mut self.points, selected_id);
+                                        self.selected_edge_start_index = None;
                                     }
                                     if can_add_restriction {
                                         if ui
@@ -170,13 +166,12 @@ impl PolygonEditor {
                                             )
                                             .clicked()
                                         {
-                                            self.edges[selected_id].apply_horizontal_restriction();
-                                            self.points[self.edges[selected_id].start_index]
-                                                .pos_mut()
-                                                .y = self.points[self.edges[selected_id].end_index]
-                                                .pos()
-                                                .y;
-                                            self.selected_edge = None;
+                                            self.points[selected_id].apply_horizontal_constraint();
+                                            self.points[selected_id].pos_mut().y = self.points
+                                                [Point::get_next_index(&self.points, selected_id)]
+                                            .pos()
+                                            .y;
+                                            self.selected_edge_start_index = None;
                                         }
                                         if ui
                                             .add_enabled(
@@ -186,13 +181,12 @@ impl PolygonEditor {
                                             )
                                             .clicked()
                                         {
-                                            self.edges[selected_id].apply_vertical_restriction();
-                                            self.points[self.edges[selected_id].start_index]
-                                                .pos_mut()
-                                                .x = self.points[self.edges[selected_id].end_index]
-                                                .pos()
-                                                .x;
-                                            self.selected_edge = None;
+                                            self.points[selected_id].apply_vertical_constraint();
+                                            self.points[selected_id].pos_mut().x = self.points
+                                                [Point::get_next_index(&self.points, selected_id)]
+                                            .pos()
+                                            .x;
+                                            self.selected_edge_start_index = None;
                                         }
                                         if ui
                                             .add(egui::Button::new("Make constant width").rounding(
@@ -204,8 +198,8 @@ impl PolygonEditor {
                                             ))
                                             .clicked()
                                         {
-                                            self.edges[selected_id].apply_width_restriction();
-                                            self.selected_edge = None;
+                                            self.points[selected_id].apply_width_constraint();
+                                            self.selected_edge_start_index = None;
                                         }
                                     } else if ui
                                         .add(egui::Button::new("Remove restriction").rounding(
@@ -217,8 +211,8 @@ impl PolygonEditor {
                                         ))
                                         .clicked()
                                     {
-                                        self.edges[selected_id].remove_restriction();
-                                        self.selected_edge = None;
+                                        self.points[selected_id].remove_constraint();
+                                        self.selected_edge_start_index = None;
                                     }
                                 },
                             );
@@ -235,14 +229,12 @@ impl Default for PolygonEditor {
             Point::new(Pos2::new(100.0, 50.0)),
             Point::new(Pos2::new(75.0, 100.0)),
         ];
-        let edges = Edge::from_points(&points);
         Self {
             line_drawing_algorithm: LineDrawingAlgorithm::Bresenham,
             points,
-            edges,
             dragged_index: None,
             polygon_dragged_index: None,
-            selected_edge: None,
+            selected_edge_start_index: None,
         }
     }
 }
@@ -286,8 +278,7 @@ impl eframe::App for PolygonEditor {
             match self.line_drawing_algorithm {
                 LineDrawingAlgorithm::Bultin => Drawer::draw_polygon_builtin(
                     &self.points,
-                    &self.edges,
-                    self.selected_edge,
+                    self.selected_edge_start_index,
                     painter,
                     Color32::LIGHT_GREEN,
                     Color32::ORANGE,
@@ -295,8 +286,7 @@ impl eframe::App for PolygonEditor {
                 ),
                 LineDrawingAlgorithm::Bresenham => Drawer::draw_polygon_bresenham(
                     &self.points,
-                    &self.edges,
-                    self.selected_edge,
+                    self.selected_edge_start_index,
                     painter,
                     Color32::YELLOW,
                     Color32::ORANGE,

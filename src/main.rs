@@ -1,5 +1,4 @@
 mod drawer;
-mod edge;
 mod point;
 mod polygon_editor;
 

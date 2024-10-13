@@ -1,6 +1,6 @@
 use egui::{Color32, Pos2};
 
-use crate::{edge::Edge, point::Point};
+use crate::point::Point;
 
 pub struct Drawer;
 
@@ -13,23 +13,22 @@ impl Drawer {
 
     pub fn draw_polygon_builtin(
         points: &[Point],
-        edges: &[Edge],
-        selected_edge: Option<usize>,
+        selected_edge_start_index: Option<usize>,
         painter: &egui::Painter,
         color: Color32,
         special_color: Color32,
         width: f32,
     ) {
-        for (id, edge) in edges.iter().enumerate() {
-            let current_color = if id == selected_edge.unwrap_or(usize::MAX) {
+        for id in 0..points.len() {
+            let current_color = if id == selected_edge_start_index.unwrap_or(usize::MAX) {
                 special_color
             } else {
                 color
             };
             painter.line_segment(
                 [
-                    *points[edge.start_index].pos(),
-                    *points[edge.end_index].pos(),
+                    *points[id].pos(),
+                    *points[Point::get_next_index(points, id)].pos(),
                 ],
                 egui::Stroke {
                     color: current_color,
@@ -41,15 +40,14 @@ impl Drawer {
 
     pub fn draw_polygon_bresenham(
         points: &[Point],
-        edges: &[Edge],
-        selected_edge: Option<usize>,
+        selected_edge_start_index: Option<usize>,
         painter: &egui::Painter,
         color: Color32,
         special_color: Color32,
     ) {
         const WIDTH: f32 = 1.0;
-        for (id, edge) in edges.iter().enumerate() {
-            let current_color = if id == selected_edge.unwrap_or(usize::MAX) {
+        for id in 0..points.len() {
+            let current_color = if id == selected_edge_start_index.unwrap_or(usize::MAX) {
                 special_color
             } else {
                 color
@@ -57,8 +55,8 @@ impl Drawer {
             Self::draw_line_bresenham(
                 painter,
                 current_color,
-                points[edge.start_index],
-                points[edge.end_index],
+                points[id],
+                points[Point::get_next_index(points, id)],
                 WIDTH,
             );
         }

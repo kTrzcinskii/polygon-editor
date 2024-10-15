@@ -46,6 +46,19 @@ impl Drawer {
                     width,
                 },
             );
+            #[cfg(feature = "show_debug_info")]
+            {
+                let id_next = Point::get_next_index(points, id);
+                let pos = Point::get_middle_point(&points[id], &points[id_next]);
+                let width = points[id].pos().distance(*points[id_next].pos());
+                painter.text(
+                    pos,
+                    egui::Align2::LEFT_TOP,
+                    width,
+                    egui::FontId::default(),
+                    Color32::WHITE,
+                );
+            }
         }
     }
 
@@ -70,6 +83,19 @@ impl Drawer {
                 points[Point::get_next_index(points, id)],
                 WIDTH,
             );
+            #[cfg(feature = "show_debug_info")]
+            {
+                let id_next = Point::get_next_index(points, id);
+                let pos = Point::get_middle_point(&points[id], &points[id_next]);
+                let width = points[id].pos().distance(*points[id_next].pos());
+                painter.text(
+                    pos,
+                    egui::Align2::LEFT_TOP,
+                    width,
+                    egui::FontId::default(),
+                    Color32::WHITE,
+                );
+            }
         }
     }
 

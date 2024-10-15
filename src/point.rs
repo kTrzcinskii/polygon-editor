@@ -4,6 +4,7 @@ use egui::{Pos2, Vec2};
 pub enum EdgeConstraint {
     Horizontal,
     Vertical,
+    // TODO: should be possible to set value of the width
     ConstWidth,
 }
 
@@ -82,7 +83,6 @@ impl Point {
         Self::adjust_adjacent_edges_after_position_update(points, point_index, delta);
     }
 
-    // FIXME: not working when all edges have constraint
     fn adjust_adjacent_edges_after_position_update(
         points: &mut [Point],
         point_index: usize,
@@ -91,12 +91,6 @@ impl Point {
         let mut point_already_done_diff = vec![Vec2::ZERO; points.len()];
         point_already_done_diff[point_index] = delta;
 
-        let mut left = point_index;
-        let mut left_stop = !points[Self::get_previous_index(points, left)].has_constraint();
-
-        let mut right = point_index;
-        let mut right_stop = !points[right].has_constraint();
-
         #[cfg(feature = "show_debug_info")]
         {
             println!("================================================");
@@ -104,71 +98,72 @@ impl Point {
                 "Starting adjustment process from: {}, moved by: {}",
                 point_index, delta
             );
-            println!(
-                "Initial left_stop: {}, right_stop: {}",
-                left_stop, right_stop
-            );
         }
+
+        let mut left = point_index;
+        let mut left_stop = !points[Self::get_previous_index(points, left)].has_constraint();
 
         #[allow(unused_variables)]
-        let mut i = 0;
-        loop {
+        let mut i_left = 0;
+        while !left_stop {
             #[cfg(feature = "show_debug_info")]
-            println!("Step: {}, Left: {}, Right: {}", i, left, right);
-            if !left_stop {
-                if Self::get_previous_index(points, left) == point_index && i > 0 {
-                    left_stop = true;
-                }
-                Self::adjust_moved_point_edge_end(
-                    points,
-                    left,
-                    point_already_done_diff[left],
-                    &mut point_already_done_diff,
-                );
-                left = Self::get_previous_index(points, left);
-                let next_edge_start = Self::get_previous_index(points, left);
-                let constraint_and_next_width_constraint =
-                    points[left].has_constraint() && points[next_edge_start].has_width_constraint();
-                let width_contraint_and_next_constraint =
-                    points[left].has_width_constraint() && points[next_edge_start].has_constraint();
-                if !constraint_and_next_width_constraint && !width_contraint_and_next_constraint {
-                    #[cfg(feature = "show_debug_info")]
-                    println!("Left stops at: {}", left);
-                    left_stop = true;
-                }
-            }
-            if !right_stop {
-                if Self::get_next_index(points, right) == point_index && i > 0 {
-                    right_stop = true;
-                }
-
-                Self::adjust_moved_point_edge_start(
-                    points,
-                    right,
-                    point_already_done_diff[right],
-                    &mut point_already_done_diff,
-                );
-                let current_edge_index = right;
-                right = Self::get_next_index(points, right);
-                let constraint_and_next_width_constraint = points[current_edge_index]
-                    .has_constraint()
-                    && points[right].has_width_constraint();
-                let width_contraint_and_next_constraint = points[current_edge_index]
-                    .has_width_constraint()
-                    && points[right].has_constraint();
-
-                if !constraint_and_next_width_constraint && !width_contraint_and_next_constraint {
-                    #[cfg(feature = "show_debug_info")]
-                    println!("Right stops at: {}", right);
-                    right_stop = true;
-                }
-            }
-            if left_stop && right_stop {
+            println!("Step: {}, Left: {}", i_left, left);
+            if Self::get_previous_index(points, left) == point_index {
                 break;
             }
-            i += 1;
+            Self::adjust_moved_point_edge_end(
+                points,
+                left,
+                point_already_done_diff[left],
+                &mut point_already_done_diff,
+            );
+            left = Self::get_previous_index(points, left);
+            let next_edge_start = Self::get_previous_index(points, left);
+            let constraint_and_next_width_constraint =
+                points[left].has_constraint() && points[next_edge_start].has_width_constraint();
+            let width_contraint_and_next_constraint =
+                points[left].has_width_constraint() && points[next_edge_start].has_constraint();
+            if !constraint_and_next_width_constraint && !width_contraint_and_next_constraint {
+                #[cfg(feature = "show_debug_info")]
+                println!("Left stops at: {}", left);
+                left_stop = true;
+            }
+            i_left += 1;
         }
-        println!("{:?}", point_already_done_diff);
+
+        let mut right = point_index;
+        let mut right_stop = !points[right].has_constraint();
+
+        #[allow(unused_variables)]
+        let mut i_right = 0;
+        while !right_stop {
+            #[cfg(feature = "show_debug_info")]
+            println!("Step: {}, Right: {}", i_right, right);
+
+            if Self::get_next_index(points, right) == point_index {
+                break;
+            }
+
+            Self::adjust_moved_point_edge_start(
+                points,
+                right,
+                point_already_done_diff[right],
+                &mut point_already_done_diff,
+            );
+            let current_edge_index = right;
+            right = Self::get_next_index(points, right);
+            let constraint_and_next_width_constraint =
+                points[current_edge_index].has_constraint() && points[right].has_width_constraint();
+            let width_contraint_and_next_constraint =
+                points[current_edge_index].has_width_constraint() && points[right].has_constraint();
+
+            if !constraint_and_next_width_constraint && !width_contraint_and_next_constraint {
+                #[cfg(feature = "show_debug_info")]
+                println!("Right stops at: {}", right);
+                right_stop = true;
+            }
+            i_right += 1;
+        }
     }
 
     fn adjust_moved_point_edge_start(

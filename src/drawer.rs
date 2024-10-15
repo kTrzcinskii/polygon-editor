@@ -6,8 +6,19 @@ pub struct Drawer;
 
 impl Drawer {
     pub fn draw_points(points: &[Point], painter: &egui::Painter, color: Color32, width: f32) {
-        for point in points {
+        #[allow(unused_variables)]
+        for (id, point) in points.iter().enumerate() {
             painter.circle(*point.pos(), width, color, egui::Stroke { color, width });
+            #[cfg(feature = "show_debug_info")]
+            {
+                painter.text(
+                    *point.pos(),
+                    egui::Align2::LEFT_TOP,
+                    id,
+                    egui::FontId::default(),
+                    Color32::WHITE,
+                );
+            }
         }
     }
 

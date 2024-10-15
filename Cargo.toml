@@ -3,6 +3,9 @@ name = "polygon-editor"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+show_debug_info = []
+
 [dependencies]
 eframe = "0.29.1"
 egui = "0.29.1"

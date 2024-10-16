@@ -4,7 +4,7 @@ use egui::{Pos2, Vec2};
 pub enum EdgeConstraint {
     Horizontal,
     Vertical,
-    ConstWidth(f32),
+    ConstWidth(i32),
 }
 
 // Each point is at the same time start of some edge
@@ -72,7 +72,7 @@ impl Point {
         self.constraint = Some(EdgeConstraint::Vertical);
     }
 
-    pub fn apply_width_constraint(&mut self, width: f32) {
+    pub fn apply_width_constraint(&mut self, width: i32) {
         self.constraint = Some(EdgeConstraint::ConstWidth(width));
     }
 
@@ -188,8 +188,8 @@ impl Point {
                     - points[other_edge_end_index].pos().y)
                     .atan2(points[point_index].pos().x - points[other_edge_end_index].pos().x);
                 let new_position = Pos2 {
-                    x: points[other_edge_end_index].pos().x + width * angle_between.cos(),
-                    y: points[other_edge_end_index].pos().y + width * angle_between.sin(),
+                    x: points[other_edge_end_index].pos().x + *width as f32 * angle_between.cos(),
+                    y: points[other_edge_end_index].pos().y + *width as f32 * angle_between.sin(),
                 };
                 *points[point_index].pos_mut() = new_position;
             }

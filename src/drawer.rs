@@ -78,7 +78,6 @@ impl Drawer {
     fn draw_edge_info(points: &[Point], id: usize, painter: &egui::Painter) {
         let id_next = Point::get_next_index(points, id);
         let mut pos = Point::get_middle_point(&points[id], &points[id_next]);
-        let width = points[id].pos().distance(*points[id_next].pos());
 
         let text = match points[id].constraint() {
             Some(c) => match c {
@@ -87,7 +86,7 @@ impl Drawer {
                     pos.x += 10.0;
                     "V"
                 }
-                EdgeConstraint::ConstWidth(_) => &format!("C({})", width as i32),
+                EdgeConstraint::ConstWidth(width) => &format!("C({})", width),
             },
             None => "",
         };
@@ -104,6 +103,7 @@ impl Drawer {
         {
             pos.x -= 10.0;
             pos.y -= 10.0;
+            let width = points[id].pos().distance(*points[id_next].pos());
             painter.text(
                 pos,
                 egui::Align2::LEFT_TOP,

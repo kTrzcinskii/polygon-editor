@@ -216,7 +216,8 @@ impl PolygonEditor {
 
                                             self.popups
                                                 .open_const_width_constraint_popup_below_widget(
-                                                    ui, width,
+                                                    ui,
+                                                    width.round() as i32,
                                                 );
                                         }
                                         if self.popups.const_width_constraint_submitted() {

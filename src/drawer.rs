@@ -1,6 +1,6 @@
 use egui::{Color32, Pos2};
 
-use crate::point::Point;
+use crate::point::{EdgeConstraint, Point};
 
 pub struct Drawer;
 
@@ -46,19 +46,7 @@ impl Drawer {
                     width,
                 },
             );
-            #[cfg(feature = "show_debug_info")]
-            {
-                let id_next = Point::get_next_index(points, id);
-                let pos = Point::get_middle_point(&points[id], &points[id_next]);
-                let width = points[id].pos().distance(*points[id_next].pos());
-                painter.text(
-                    pos,
-                    egui::Align2::LEFT_TOP,
-                    width,
-                    egui::FontId::default(),
-                    Color32::WHITE,
-                );
-            }
+            Self::draw_edge_info(points, id, painter);
         }
     }
 
@@ -83,19 +71,46 @@ impl Drawer {
                 points[Point::get_next_index(points, id)],
                 WIDTH,
             );
-            #[cfg(feature = "show_debug_info")]
-            {
-                let id_next = Point::get_next_index(points, id);
-                let pos = Point::get_middle_point(&points[id], &points[id_next]);
-                let width = points[id].pos().distance(*points[id_next].pos());
-                painter.text(
-                    pos,
-                    egui::Align2::LEFT_TOP,
-                    width,
-                    egui::FontId::default(),
-                    Color32::WHITE,
-                );
-            }
+            Self::draw_edge_info(points, id, painter);
+        }
+    }
+
+    fn draw_edge_info(points: &[Point], id: usize, painter: &egui::Painter) {
+        let id_next = Point::get_next_index(points, id);
+        let mut pos = Point::get_middle_point(&points[id], &points[id_next]);
+        let width = points[id].pos().distance(*points[id_next].pos());
+
+        let text = match points[id].constraint() {
+            Some(c) => match c {
+                EdgeConstraint::Horizontal => "H",
+                EdgeConstraint::Vertical => {
+                    pos.x += 10.0;
+                    "V"
+                }
+                EdgeConstraint::ConstWidth(_) => &format!("C({})", width as i32),
+            },
+            None => "",
+        };
+
+        painter.text(
+            pos,
+            egui::Align2::CENTER_TOP,
+            text,
+            egui::FontId::monospace(24.0),
+            Color32::LIGHT_BLUE,
+        );
+
+        #[cfg(feature = "show_debug_info")]
+        {
+            pos.x -= 10.0;
+            pos.y -= 10.0;
+            painter.text(
+                pos,
+                egui::Align2::LEFT_TOP,
+                width,
+                egui::FontId::default(),
+                Color32::WHITE,
+            );
         }
     }
 

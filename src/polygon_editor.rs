@@ -8,7 +8,14 @@ enum LineDrawingAlgorithm {
     Bresenham,
 }
 
+#[derive(PartialEq)]
+enum PolygonMode {
+    Drawing,
+    Editing,
+}
+
 pub struct PolygonEditor {
+    polygon_mode: PolygonMode,
     /// Which line drawing algorithm to use
     line_drawing_algorithm: LineDrawingAlgorithm,
     /// List of all polygon points
@@ -25,6 +32,14 @@ pub struct PolygonEditor {
 }
 
 impl PolygonEditor {
+    pub fn new_with_drawing_mode() -> Self {
+        Self {
+            polygon_mode: PolygonMode::Drawing,
+            points: vec![],
+            ..Default::default()
+        }
+    }
+
     pub fn handle_dragging_points(&mut self, ctx: &egui::Context) {
         let mouse_pos = ctx.pointer_interact_pos();
         if let Some(pos) = mouse_pos {
@@ -44,6 +59,29 @@ impl PolygonEditor {
             } else {
                 // Stop dragging if LMB no longer hold
                 self.dragged_index = None;
+            }
+        }
+    }
+
+    pub fn handle_adding_point_in_drawing_mode(
+        &mut self,
+        ctx: &egui::Context,
+        main_panel_width: f32,
+    ) {
+        let mouse_pos = ctx.pointer_interact_pos();
+        if let Some(pos) = mouse_pos {
+            // If clicking outside the panel (on controls panel) ignore this click
+            if pos.x > main_panel_width {
+                return;
+            }
+            if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary)) {
+                if self.points.len() >= 3 && (*self.points[0].pos() - pos).length() < 10.0 {
+                    self.polygon_mode = PolygonMode::Editing;
+                }
+                // It means that we didnt change the mode, so user wants to add new point
+                if self.polygon_mode == PolygonMode::Drawing {
+                    self.points.push(Point::new(pos));
+                }
             }
         }
     }
@@ -261,6 +299,7 @@ impl Default for PolygonEditor {
             Point::new(Pos2::new(75.0, 100.0)),
         ];
         Self {
+            polygon_mode: PolygonMode::Editing,
             line_drawing_algorithm: LineDrawingAlgorithm::Bresenham,
             points,
             dragged_index: None,
@@ -296,6 +335,12 @@ impl eframe::App for PolygonEditor {
                 );
                 ui.separator();
                 ui.vertical_centered(|ui| {
+                    if ui.button("Draw new polygon").clicked() {
+                        *self = Self::new_with_drawing_mode();
+                    }
+                });
+                ui.separator();
+                ui.vertical_centered(|ui| {
                     if ui.button("Restore default state").clicked() {
                         *self = Self::default();
                     }
@@ -305,35 +350,59 @@ impl eframe::App for PolygonEditor {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             let painter = ui.painter();
-
-            // Important: Order here matters!
-            match self.line_drawing_algorithm {
-                LineDrawingAlgorithm::Bultin => Drawer::draw_polygon_builtin(
-                    &self.points,
-                    self.selected_edge_start_index,
-                    painter,
-                    Color32::LIGHT_GREEN,
-                    Color32::ORANGE,
-                    1.0,
-                ),
-                LineDrawingAlgorithm::Bresenham => Drawer::draw_polygon_bresenham(
-                    &self.points,
-                    self.selected_edge_start_index,
-                    painter,
-                    Color32::YELLOW,
-                    Color32::ORANGE,
-                ),
-            };
-            Drawer::draw_points(&self.points, painter, Color32::DARK_BLUE, 4.0);
-            // ctrl + LMB on point
-            self.handle_dragging_polygon(ctx);
-            // alt + LMB on point
-            self.handle_removing_point(ctx);
-            // LMB on point
-            self.handle_dragging_points(ctx);
-            // RMB on edge
-            self.handle_selecting_edge(ctx);
-            self.show_context_menu_for_selected_edge(ctx, ui);
+            match self.polygon_mode {
+                PolygonMode::Drawing => {
+                    // Important: Order here matters!
+                    match self.line_drawing_algorithm {
+                        LineDrawingAlgorithm::Bultin => Drawer::draw_incomplete_polygon_builtin(
+                            &self.points,
+                            painter,
+                            Color32::LIGHT_GREEN,
+                            1.0,
+                        ),
+                        LineDrawingAlgorithm::Bresenham => {
+                            Drawer::draw_incomplete_polygon_bresenham(
+                                &self.points,
+                                painter,
+                                Color32::YELLOW,
+                            )
+                        }
+                    };
+                    Drawer::draw_points(&self.points, painter, Color32::DARK_BLUE, 4.0);
+                    // LMB on plane
+                    self.handle_adding_point_in_drawing_mode(ctx, ui.min_rect().width());
+                }
+                PolygonMode::Editing => {
+                    // Important: Order here matters!
+                    match self.line_drawing_algorithm {
+                        LineDrawingAlgorithm::Bultin => Drawer::draw_polygon_builtin(
+                            &self.points,
+                            self.selected_edge_start_index,
+                            painter,
+                            Color32::LIGHT_GREEN,
+                            Color32::ORANGE,
+                            1.0,
+                        ),
+                        LineDrawingAlgorithm::Bresenham => Drawer::draw_polygon_bresenham(
+                            &self.points,
+                            self.selected_edge_start_index,
+                            painter,
+                            Color32::YELLOW,
+                            Color32::ORANGE,
+                        ),
+                    };
+                    Drawer::draw_points(&self.points, painter, Color32::DARK_BLUE, 4.0);
+                    // ctrl + LMB on point
+                    self.handle_dragging_polygon(ctx);
+                    // alt + LMB on point
+                    self.handle_removing_point(ctx);
+                    // LMB on point
+                    self.handle_dragging_points(ctx);
+                    // RMB on edge
+                    self.handle_selecting_edge(ctx);
+                    self.show_context_menu_for_selected_edge(ctx, ui);
+                }
+            }
         });
     }
 }

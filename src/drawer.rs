@@ -50,6 +50,26 @@ impl Drawer {
         }
     }
 
+    pub fn draw_incomplete_polygon_builtin(
+        points: &[Point],
+        painter: &egui::Painter,
+        color: Color32,
+        width: f32,
+    ) {
+        if points.is_empty() {
+            return;
+        }
+        for id in 0..points.len() - 1 {
+            painter.line_segment(
+                [
+                    *points[id].pos(),
+                    *points[Point::get_next_index(points, id)].pos(),
+                ],
+                egui::Stroke { color, width },
+            );
+        }
+    }
+
     pub fn draw_polygon_bresenham(
         points: &[Point],
         selected_edge_start_index: Option<usize>,
@@ -67,6 +87,27 @@ impl Drawer {
             Self::draw_line_bresenham(
                 painter,
                 current_color,
+                points[id],
+                points[Point::get_next_index(points, id)],
+                WIDTH,
+            );
+            Self::draw_edge_info(points, id, painter);
+        }
+    }
+
+    pub fn draw_incomplete_polygon_bresenham(
+        points: &[Point],
+        painter: &egui::Painter,
+        color: Color32,
+    ) {
+        const WIDTH: f32 = 1.0;
+        if points.is_empty() {
+            return;
+        }
+        for id in 0..points.len() - 1 {
+            Self::draw_line_bresenham(
+                painter,
+                color,
                 points[id],
                 points[Point::get_next_index(points, id)],
                 WIDTH,

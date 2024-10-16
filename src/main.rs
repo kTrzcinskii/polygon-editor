@@ -1,6 +1,7 @@
 mod drawer;
 mod point;
 mod polygon_editor;
+mod popups;
 
 use polygon_editor::PolygonEditor;
 

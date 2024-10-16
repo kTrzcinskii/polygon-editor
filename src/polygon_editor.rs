@@ -1,6 +1,6 @@
 use egui::{Color32, Pos2, Rounding, Vec2};
 
-use crate::{drawer::Drawer, point::Point};
+use crate::{drawer::Drawer, point::Point, popups::Popups};
 
 #[derive(PartialEq)]
 enum LineDrawingAlgorithm {
@@ -20,6 +20,8 @@ pub struct PolygonEditor {
     polygon_dragged_index: Option<usize>,
     /// Id of edge (meaning id of the first vertex of it) currently selected for context menu
     selected_edge_start_index: Option<usize>,
+    /// Data related to all popups
+    popups: Popups,
 }
 
 impl PolygonEditor {
@@ -151,8 +153,8 @@ impl PolygonEditor {
                                         Point::add_on_edge(&mut self.points, selected_id);
                                         self.selected_edge_start_index = None;
                                     }
-                                    // TODO: make suer that after adding constraint all previous are still applied
                                     if can_add_constraint {
+                                        // Horizontal button
                                         if ui
                                             .add_enabled(
                                                 !Point::neighour_edges_have_horizontal_constraint(
@@ -171,6 +173,7 @@ impl PolygonEditor {
                                             );
                                             self.selected_edge_start_index = None;
                                         }
+                                        // Vertical button
                                         if ui
                                             .add_enabled(
                                                 !Point::neighour_edges_have_vertical_constraint(
@@ -189,28 +192,44 @@ impl PolygonEditor {
                                             );
                                             self.selected_edge_start_index = None;
                                         }
-                                        if ui
-                                            .add(egui::Button::new("Make constant width").rounding(
+                                        // Const width button
+                                        let const_width_button = ui.add(
+                                            egui::Button::new("Make constant width").rounding(
                                                 Rounding {
                                                     nw: 0.0,
                                                     ne: 0.0,
                                                     ..Default::default()
                                                 },
-                                            ))
-                                            .clicked()
-                                        {
+                                            ),
+                                        );
+                                        self.popups
+                                            .render_const_width_constraint_popup_below_widget(
+                                                ui,
+                                                &const_width_button,
+                                            );
+                                        if const_width_button.clicked() {
                                             let selected_edge_end_index =
                                                 Point::get_next_index(&self.points, selected_id);
                                             let width = self.points[selected_id].pos().distance(
                                                 *self.points[selected_edge_end_index].pos(),
                                             );
-                                            // TODO: add some popup in which you can enter it
-                                            self.points[selected_id].apply_width_constraint(width);
+
+                                            self.popups
+                                                .open_const_width_constraint_popup_below_widget(
+                                                    ui, width,
+                                                );
+                                        }
+                                        if self.popups.const_width_constraint_submitted() {
+                                            let new_width =
+                                                self.popups.const_width_constraint_user_input();
+                                            self.points[selected_id]
+                                                .apply_width_constraint(new_width);
                                             Point::adjust_adjacent_edges_after_position_update(
                                                 &mut self.points,
                                                 selected_id,
                                             );
                                             self.selected_edge_start_index = None;
+                                            self.popups.reset_const_width_constraint_submitted();
                                         }
                                     } else if ui
                                         .add(egui::Button::new("Remove constraint").rounding(
@@ -246,6 +265,7 @@ impl Default for PolygonEditor {
             dragged_index: None,
             polygon_dragged_index: None,
             selected_edge_start_index: None,
+            popups: Popups::default(),
         }
     }
 }

@@ -151,6 +151,7 @@ impl PolygonEditor {
                                         Point::add_on_edge(&mut self.points, selected_id);
                                         self.selected_edge_start_index = None;
                                     }
+                                    // TODO: make suer that after adding constraint all previous are still applied
                                     if can_add_constraint {
                                         if ui
                                             .add_enabled(
@@ -164,10 +165,10 @@ impl PolygonEditor {
                                             .clicked()
                                         {
                                             self.points[selected_id].apply_horizontal_constraint();
-                                            self.points[selected_id].pos_mut().y = self.points
-                                                [Point::get_next_index(&self.points, selected_id)]
-                                            .pos()
-                                            .y;
+                                            Point::adjust_adjacent_edges_after_position_update(
+                                                &mut self.points,
+                                                selected_id,
+                                            );
                                             self.selected_edge_start_index = None;
                                         }
                                         if ui
@@ -182,10 +183,10 @@ impl PolygonEditor {
                                             .clicked()
                                         {
                                             self.points[selected_id].apply_vertical_constraint();
-                                            self.points[selected_id].pos_mut().x = self.points
-                                                [Point::get_next_index(&self.points, selected_id)]
-                                            .pos()
-                                            .x;
+                                            Point::adjust_adjacent_edges_after_position_update(
+                                                &mut self.points,
+                                                selected_id,
+                                            );
                                             self.selected_edge_start_index = None;
                                         }
                                         if ui
@@ -198,7 +199,17 @@ impl PolygonEditor {
                                             ))
                                             .clicked()
                                         {
-                                            self.points[selected_id].apply_width_constraint();
+                                            let selected_edge_end_index =
+                                                Point::get_next_index(&self.points, selected_id);
+                                            let width = self.points[selected_id].pos().distance(
+                                                *self.points[selected_edge_end_index].pos(),
+                                            );
+                                            // TODO: add some popup in which you can enter it
+                                            self.points[selected_id].apply_width_constraint(width);
+                                            Point::adjust_adjacent_edges_after_position_update(
+                                                &mut self.points,
+                                                selected_id,
+                                            );
                                             self.selected_edge_start_index = None;
                                         }
                                     } else if ui

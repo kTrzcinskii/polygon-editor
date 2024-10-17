@@ -1,3 +1,4 @@
+mod bezier;
 mod drawer;
 mod point;
 mod polygon_editor;

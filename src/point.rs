@@ -1,5 +1,7 @@
 use egui::{Pos2, Vec2};
 
+use crate::bezier::BezierData;
+
 #[derive(Clone, Copy)]
 pub enum EdgeConstraint {
     Horizontal,
@@ -12,7 +14,10 @@ pub enum EdgeConstraint {
 #[derive(Clone, Copy)]
 pub struct Point {
     pos: Pos2,
+    /// Contraint that is applied to edge which starts in this point (and ends in the next one)
     constraint: Option<EdgeConstraint>,
+    /// Data for bezier segment that starts in this point (and ends in the next one)
+    bezier_data: Option<BezierData>,
 }
 
 impl Point {
@@ -20,6 +25,7 @@ impl Point {
         Self {
             pos,
             constraint: None,
+            bezier_data: None,
         }
     }
 
@@ -33,6 +39,14 @@ impl Point {
 
     pub fn constraint(&self) -> &Option<EdgeConstraint> {
         &self.constraint
+    }
+
+    pub fn bezier_data(&self) -> &Option<BezierData> {
+        &self.bezier_data
+    }
+
+    pub fn bezier_data_mut(&mut self) -> Option<&mut BezierData> {
+        self.bezier_data.as_mut()
     }
 
     pub fn has_constraint(&self) -> bool {
@@ -58,6 +72,14 @@ impl Point {
             Some(res) => matches!(res, EdgeConstraint::ConstWidth(_)),
             None => false,
         }
+    }
+
+    pub fn is_start_of_bezier_segment(&self) -> bool {
+        self.bezier_data.is_some()
+    }
+
+    pub fn init_bezier_data(&mut self, initial_pos: [Pos2; 2]) {
+        self.bezier_data = Some(BezierData::new(initial_pos));
     }
 
     pub fn remove_constraint(&mut self) {
@@ -295,5 +317,14 @@ impl Point {
         let next_edge_start = Self::get_next_index(points, point_index);
         points[previous_edge_start].has_horizontal_constraint()
             || points[next_edge_start].has_horizontal_constraint()
+    }
+
+    pub fn get_points_between_for_initial_bezier(start: &Point, end: &Point) -> [Pos2; 2] {
+        const OFFSET: f32 = 20.0;
+        let diff = *end.pos() - *start.pos();
+        let p = Vec2::new(-diff.y, diff.x).normalized() * OFFSET;
+        let a = *start.pos() + diff * 1.0 / 3.0 + p;
+        let b = *start.pos() + diff * 2.0 / 3.0 + p;
+        [a, b]
     }
 }

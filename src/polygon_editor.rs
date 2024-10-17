@@ -23,6 +23,8 @@ pub struct PolygonEditor {
     points: Vec<Point>,
     /// Id of point inside points that is currently being dragged by user
     dragged_index: Option<usize>,
+    /// Bezier control point that is currenlty dragged: (point id, id of control point in that point bezier data)
+    bezier_control_point_dragged: Option<(usize, usize)>,
     /// Id of point inside points that is currently used to dragg whole polygon
     polygon_dragged_index: Option<usize>,
     /// Id of edge (meaning id of the first vertex of it) currently selected for context menu
@@ -48,17 +50,36 @@ impl PolygonEditor {
                 // If already dragging then move point
                 if let Some(index) = self.dragged_index {
                     Point::update_position(&mut self.points, index, pos);
+                } else if let Some((point_index, inner_point_index)) =
+                    self.bezier_control_point_dragged
+                {
+                    match self.points[point_index].bezier_data_mut() {
+                        Some(bd) => bd.update_inner_point_position(inner_point_index, pos),
+                        None => eprintln!(
+                            "Trying to move bezier control point for point without bezier segment"
+                        ),
+                    }
                 } else {
                     for (i, point) in self.points.iter().enumerate() {
                         // Start dragging the point if it's close enough
                         if (*point.pos() - pos).length() < 10.0 {
                             self.dragged_index = Some(i);
+                            break;
+                        }
+                        if let Some(bezier_data) = point.bezier_data() {
+                            for (ip, inner_point) in bezier_data.inner_points().iter().enumerate() {
+                                if (*inner_point - pos).length() < 10.0 {
+                                    self.bezier_control_point_dragged = Some((i, ip));
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
             } else {
                 // Stop dragging if LMB no longer hold
                 self.dragged_index = None;
+                self.bezier_control_point_dragged = None;
             }
         }
     }
@@ -157,8 +178,9 @@ impl PolygonEditor {
     pub fn show_context_menu_for_selected_edge(&mut self, ctx: &egui::Context, ui: &egui::Ui) {
         const CONTEXT_MENU_MIN_WDITH: f32 = 120.0;
         if let Some(selected_id) = self.selected_edge_start_index {
-            let can_add_constraint = !self.points[selected_id].has_constraint();
-            let number_of_buttons = if can_add_constraint { 4 } else { 2 };
+            let can_add_constraint = !self.points[selected_id].has_constraint()
+                && !self.points[selected_id].is_start_of_bezier_segment();
+            let number_of_buttons = if can_add_constraint { 5 } else { 2 };
 
             let container_pos = Point::get_middle_point(
                 &self.points[selected_id],
@@ -228,6 +250,26 @@ impl PolygonEditor {
                                                 &mut self.points,
                                                 selected_id,
                                             );
+                                            self.selected_edge_start_index = None;
+                                        }
+                                        // Bezier button
+                                        if ui
+                                            .add(
+                                                egui::Button::new("Add bezier segment")
+                                                    .rounding(Rounding::ZERO),
+                                            )
+                                            .clicked()
+                                        {
+                                            let initial_points =
+                                                Point::get_points_between_for_initial_bezier(
+                                                    &self.points[selected_id],
+                                                    &self.points[Point::get_next_index(
+                                                        &self.points,
+                                                        selected_id,
+                                                    )],
+                                                );
+                                            self.points[selected_id]
+                                                .init_bezier_data(initial_points);
                                             self.selected_edge_start_index = None;
                                         }
                                         // Const width button
@@ -303,6 +345,7 @@ impl Default for PolygonEditor {
             line_drawing_algorithm: LineDrawingAlgorithm::Bresenham,
             points,
             dragged_index: None,
+            bezier_control_point_dragged: None,
             polygon_dragged_index: None,
             selected_edge_start_index: None,
             popups: Popups::default(),
@@ -368,7 +411,7 @@ impl eframe::App for PolygonEditor {
                             )
                         }
                     };
-                    Drawer::draw_points(&self.points, painter, Color32::DARK_BLUE, 4.0);
+                    Drawer::draw_points(&self.points, painter, Color32::DARK_BLUE);
                     // LMB on plane
                     self.handle_adding_point_in_drawing_mode(ctx, ui.min_rect().width());
                 }
@@ -391,7 +434,7 @@ impl eframe::App for PolygonEditor {
                             Color32::ORANGE,
                         ),
                     };
-                    Drawer::draw_points(&self.points, painter, Color32::DARK_BLUE, 4.0);
+                    Drawer::draw_points(&self.points, painter, Color32::DARK_BLUE);
                     // ctrl + LMB on point
                     self.handle_dragging_polygon(ctx);
                     // alt + LMB on point

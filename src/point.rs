@@ -82,6 +82,10 @@ impl Point {
         self.bezier_data = Some(BezierData::new(initial_pos));
     }
 
+    pub fn remove_bezier_data(&mut self) {
+        self.bezier_data = None;
+    }
+
     pub fn remove_constraint(&mut self) {
         self.constraint = None;
     }
@@ -237,7 +241,9 @@ impl Point {
     pub fn add_on_edge(points: &mut Vec<Point>, edge_start_index: usize) {
         // If the edge we are dividing had any constraint we remove it,
         // as there should be two new edges each without any constraint
-        points[edge_start_index].constraint = None;
+        // Same goes for bezier segment
+        points[edge_start_index].remove_constraint();
+        points[edge_start_index].remove_bezier_data();
         let next_index = Self::get_next_index(points, edge_start_index);
 
         // Adding new edge is just inserting a point at correct index
@@ -248,8 +254,10 @@ impl Point {
     pub fn remove_at(points: &mut Vec<Point>, point_index: usize) {
         // If the point behind it has any restriction, we remove it
         // Restrisction on the removed point is removed with it, so we dont care about it
+        // Same goes for bezier data
         let previous_index = Self::get_previous_index(points, point_index);
-        points[previous_index].constraint = None;
+        points[previous_index].remove_constraint();
+        points[previous_index].remove_bezier_data();
         points.remove(point_index);
     }
 

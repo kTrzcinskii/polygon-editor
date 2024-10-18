@@ -176,11 +176,15 @@ impl PolygonEditor {
     }
 
     pub fn show_context_menu_for_selected_edge(&mut self, ctx: &egui::Context, ui: &egui::Ui) {
-        const CONTEXT_MENU_MIN_WDITH: f32 = 120.0;
+        const CONTEXT_MENU_MIN_WDITH: f32 = 150.0;
         if let Some(selected_id) = self.selected_edge_start_index {
-            let can_add_constraint = !self.points[selected_id].has_constraint()
+            let can_add_constraint_or_bezier_segment = !self.points[selected_id].has_constraint()
                 && !self.points[selected_id].is_start_of_bezier_segment();
-            let number_of_buttons = if can_add_constraint { 5 } else { 2 };
+            let number_of_buttons = if can_add_constraint_or_bezier_segment {
+                5
+            } else {
+                2
+            };
 
             let container_pos = Point::get_middle_point(
                 &self.points[selected_id],
@@ -213,7 +217,27 @@ impl PolygonEditor {
                                         Point::add_on_edge(&mut self.points, selected_id);
                                         self.selected_edge_start_index = None;
                                     }
-                                    if can_add_constraint {
+                                    if can_add_constraint_or_bezier_segment {
+                                        // Bezier button
+                                        if ui
+                                            .add(
+                                                egui::Button::new("Add bezier segment")
+                                                    .rounding(Rounding::ZERO),
+                                            )
+                                            .clicked()
+                                        {
+                                            let initial_points =
+                                                Point::get_points_between_for_initial_bezier(
+                                                    &self.points[selected_id],
+                                                    &self.points[Point::get_next_index(
+                                                        &self.points,
+                                                        selected_id,
+                                                    )],
+                                                );
+                                            self.points[selected_id]
+                                                .init_bezier_data(initial_points);
+                                            self.selected_edge_start_index = None;
+                                        }
                                         // Horizontal button
                                         if ui
                                             .add_enabled(
@@ -250,26 +274,6 @@ impl PolygonEditor {
                                                 &mut self.points,
                                                 selected_id,
                                             );
-                                            self.selected_edge_start_index = None;
-                                        }
-                                        // Bezier button
-                                        if ui
-                                            .add(
-                                                egui::Button::new("Add bezier segment")
-                                                    .rounding(Rounding::ZERO),
-                                            )
-                                            .clicked()
-                                        {
-                                            let initial_points =
-                                                Point::get_points_between_for_initial_bezier(
-                                                    &self.points[selected_id],
-                                                    &self.points[Point::get_next_index(
-                                                        &self.points,
-                                                        selected_id,
-                                                    )],
-                                                );
-                                            self.points[selected_id]
-                                                .init_bezier_data(initial_points);
                                             self.selected_edge_start_index = None;
                                         }
                                         // Const width button
@@ -312,18 +316,35 @@ impl PolygonEditor {
                                             self.selected_edge_start_index = None;
                                             self.popups.reset_const_width_constraint_submitted();
                                         }
-                                    } else if ui
-                                        .add(egui::Button::new("Remove constraint").rounding(
-                                            Rounding {
-                                                nw: 0.0,
-                                                ne: 0.0,
-                                                ..Default::default()
-                                            },
-                                        ))
-                                        .clicked()
+                                    } else if self.points[selected_id].has_constraint() {
+                                        let response = ui.add(
+                                            egui::Button::new("Remove constraint").rounding(
+                                                Rounding {
+                                                    nw: 0.0,
+                                                    ne: 0.0,
+                                                    ..Default::default()
+                                                },
+                                            ),
+                                        );
+                                        if response.clicked() {
+                                            self.points[selected_id].remove_constraint();
+                                            self.selected_edge_start_index = None;
+                                        }
+                                    } else if self.points[selected_id].is_start_of_bezier_segment()
                                     {
-                                        self.points[selected_id].remove_constraint();
-                                        self.selected_edge_start_index = None;
+                                        let response = ui.add(
+                                            egui::Button::new("Remove bezier segment").rounding(
+                                                Rounding {
+                                                    nw: 0.0,
+                                                    ne: 0.0,
+                                                    ..Default::default()
+                                                },
+                                            ),
+                                        );
+                                        if response.clicked() {
+                                            self.points[selected_id].remove_bezier_data();
+                                            self.selected_edge_start_index = None;
+                                        }
                                     }
                                 },
                             );

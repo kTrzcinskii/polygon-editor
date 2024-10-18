@@ -348,6 +348,10 @@ impl Point {
     pub fn update_position_all(points: &mut [Point], diff: Vec2) {
         for point in points {
             *point.pos_mut() += diff;
+            if let Some(bd) = point.bezier_data_mut() {
+                bd.inner_points_mut()[0] += diff;
+                bd.inner_points_mut()[1] += diff;
+            }
         }
     }
 

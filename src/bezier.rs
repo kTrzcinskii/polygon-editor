@@ -16,6 +16,10 @@ impl BezierData {
         &self.inner_points
     }
 
+    pub fn inner_points_mut(&mut self) -> &mut [Pos2; 2] {
+        &mut self.inner_points
+    }
+
     pub fn update_inner_point_position(&mut self, index: usize, new_position: Pos2) {
         self.inner_points[index] = new_position;
     }

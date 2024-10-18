@@ -78,6 +78,10 @@ impl Point {
         self.bezier_data.is_some()
     }
 
+    pub fn is_end_of_bezier_segment(points: &[Point], point_index: usize) -> bool {
+        points[Point::get_previous_index(points, point_index)].is_start_of_bezier_segment()
+    }
+
     pub fn init_bezier_data(&mut self, initial_pos: [Pos2; 2]) {
         self.bezier_data = Some(BezierData::new(initial_pos));
     }
@@ -103,10 +107,90 @@ impl Point {
     }
 
     pub fn update_position(points: &mut [Point], point_index: usize, new_position: Pos2) {
+        let previous_position = *points[point_index].pos();
         points[point_index].pos = new_position;
+        Self::adjust_adjacent_bezier_segments_control_points(
+            points,
+            point_index,
+            previous_position,
+        );
         Self::adjust_adjacent_edges_after_position_update(points, point_index);
     }
 
+    pub fn adjust_adjacent_bezier_segments_control_points(
+        points: &mut [Point],
+        point_index: usize,
+        previous_position: Pos2,
+    ) {
+        if points[point_index].is_start_of_bezier_segment() {
+            Self::adjust_bezier_segment_control_points_from_start(
+                points,
+                point_index,
+                previous_position,
+            );
+        } else if Self::is_end_of_bezier_segment(points, point_index) {
+            Self::adjust_bezier_segment_control_points_from_end(
+                points,
+                point_index,
+                previous_position,
+            );
+        }
+    }
+
+    fn adjust_bezier_segment_control_points_from_start(
+        points: &mut [Point],
+        point_index: usize,
+        previous_position: Pos2,
+    ) {
+        let bezier_data = points[point_index].bezier_data().expect(
+            "This function should only be called for point which is the start of bezier segment",
+        );
+        let inner_points = *bezier_data.inner_points();
+        let end_index = Self::get_next_index(points, point_index);
+        let initial_distance = previous_position.distance(*points[end_index].pos());
+        let new_distance = points[point_index].pos().distance(*points[end_index].pos());
+        let scale = new_distance / initial_distance;
+        let vector_end_to_c1 = inner_points[1] - *points[end_index].pos();
+        let new_c1 = *points[end_index].pos() + vector_end_to_c1 * scale;
+        let vector_c1_to_c0 = inner_points[0] - inner_points[1];
+        let new_c0 = new_c1 + vector_c1_to_c0 * scale;
+        let bezier_data = points[point_index]
+            .bezier_data_mut()
+            .expect("Should never happen after first check");
+        bezier_data.update_inner_point_position(0, new_c0);
+        bezier_data.update_inner_point_position(1, new_c1);
+    }
+
+    fn adjust_bezier_segment_control_points_from_end(
+        points: &mut [Point],
+        point_index: usize,
+        previous_position: Pos2,
+    ) {
+        let start_index = Self::get_previous_index(points, point_index);
+        let bezier_data = points[start_index].bezier_data().expect(
+            "This function should only be called for point which is the end of bezier segment",
+        );
+        let inner_points = *bezier_data.inner_points();
+        let initial_distance = previous_position.distance(*points[start_index].pos());
+        let new_distance = points[point_index]
+            .pos()
+            .distance(*points[start_index].pos());
+        let scale = new_distance / initial_distance;
+        let vector_start_to_c0 = inner_points[0] - *points[start_index].pos();
+        let new_c0 = *points[start_index].pos() + vector_start_to_c0 * scale;
+        let vector_c0_to_c1 = inner_points[1] - inner_points[0];
+        let new_c1 = new_c0 + vector_c0_to_c1 * scale;
+        let bezier_data = points[start_index]
+            .bezier_data_mut()
+            .expect("Should never happen after first check");
+        bezier_data.update_inner_point_position(0, new_c0);
+        bezier_data.update_inner_point_position(1, new_c1);
+    }
+
+    // TODO:
+    // - when moving edge move point that is either start or end of bezier segment than we should properly move
+    // control points (currently they are moved only when dragging start/end of bezier segment)
+    // - should properly handle C1 and G1
     pub fn adjust_adjacent_edges_after_position_update(points: &mut [Point], point_index: usize) {
         #[cfg(feature = "show_debug_info")]
         {

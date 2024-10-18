@@ -4,6 +4,7 @@ use crate::point::{EdgeConstraint, Point};
 
 const POINT_WIDTH: f32 = 4.0;
 const BEZIER_POINT_COLOR: Color32 = Color32::from_rgb(252, 15, 192);
+const BEZIER_CURVE_COLOR: Color32 = Color32::from_rgb(0, 255, 255);
 
 pub struct Drawer;
 
@@ -97,7 +98,13 @@ impl Drawer {
                 color
             };
             let id_next = Point::get_next_index(points, id);
-            Self::draw_line_bresenham(painter, current_color, points[id], points[id_next], WIDTH);
+            Self::draw_line_bresenham(
+                painter,
+                current_color,
+                points[id].pos(),
+                points[id_next].pos(),
+                WIDTH,
+            );
             Self::draw_edge_info(points, id, painter);
             if points[id].is_start_of_bezier_segment() {
                 Self::draw_brezier_segment(&points[id], &points[id_next], painter);
@@ -118,8 +125,8 @@ impl Drawer {
             Self::draw_line_bresenham(
                 painter,
                 color,
-                points[id],
-                points[Point::get_next_index(points, id)],
+                points[id].pos(),
+                points[Point::get_next_index(points, id)].pos(),
                 WIDTH,
             );
             Self::draw_edge_info(points, id, painter);
@@ -168,14 +175,14 @@ impl Drawer {
     fn draw_line_bresenham(
         painter: &egui::Painter,
         color: Color32,
-        start: Point,
-        end: Point,
+        start: &Pos2,
+        end: &Pos2,
         width: f32,
     ) {
-        let x1 = start.pos().x as i32;
-        let y1 = start.pos().y as i32;
-        let x2 = end.pos().x as i32;
-        let y2 = end.pos().y as i32;
+        let x1 = start.x as i32;
+        let y1 = start.y as i32;
+        let x2 = end.x as i32;
+        let y2 = end.y as i32;
 
         let dx = x2 - x1;
         let dy = y2 - y1;
@@ -348,6 +355,17 @@ impl Drawer {
                 Color32::GRAY,
                 all_points[id],
                 all_points[id_next],
+                1.0,
+            );
+        }
+        let curve_points = bezier_data.get_bezier_curve_points(start, end);
+        for id in 0..(curve_points.len() - 1) {
+            let next_id = id + 1;
+            Self::draw_line_bresenham(
+                painter,
+                BEZIER_CURVE_COLOR,
+                &curve_points[id],
+                &curve_points[next_id],
                 1.0,
             );
         }

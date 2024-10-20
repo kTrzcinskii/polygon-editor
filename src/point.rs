@@ -9,6 +9,13 @@ pub enum EdgeConstraint {
     ConstWidth(i32),
 }
 
+#[derive(Clone, Copy)]
+pub enum ContinuousityType {
+    G0,
+    C1,
+    G1,
+}
+
 // Each point is at the same time start of some edge
 // Information about this edge are stored in this struct
 #[derive(Clone, Copy)]
@@ -18,6 +25,7 @@ pub struct Point {
     constraint: Option<EdgeConstraint>,
     /// Data for bezier segment that starts in this point (and ends in the next one)
     bezier_data: Option<BezierData>,
+    continuousity_type: ContinuousityType,
 }
 
 impl Point {
@@ -26,6 +34,7 @@ impl Point {
             pos,
             constraint: None,
             bezier_data: None,
+            continuousity_type: ContinuousityType::G0,
         }
     }
 
@@ -82,12 +91,36 @@ impl Point {
         points[Point::get_previous_index(points, point_index)].is_start_of_bezier_segment()
     }
 
+    pub fn is_part_of_bezier_segment(points: &[Point], point_index: usize) -> bool {
+        Self::is_end_of_bezier_segment(points, point_index)
+            || points[point_index].is_start_of_bezier_segment()
+    }
+
     pub fn init_bezier_data(&mut self, initial_pos: [Pos2; 2]) {
         self.bezier_data = Some(BezierData::new(initial_pos));
     }
 
     pub fn remove_bezier_data(&mut self) {
         self.bezier_data = None;
+    }
+
+    pub fn continuousity_type(&self) -> &ContinuousityType {
+        &self.continuousity_type
+    }
+
+    #[allow(non_snake_case)]
+    pub fn apply_G0(&mut self) {
+        self.continuousity_type = ContinuousityType::G0;
+    }
+
+    #[allow(non_snake_case)]
+    pub fn apply_G1(&mut self) {
+        self.continuousity_type = ContinuousityType::G1;
+    }
+
+    #[allow(non_snake_case)]
+    pub fn apply_C1(&mut self) {
+        self.continuousity_type = ContinuousityType::C1;
     }
 
     pub fn remove_constraint(&mut self) {

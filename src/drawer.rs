@@ -1,26 +1,39 @@
 use egui::{Color32, Pos2};
 
-use crate::point::{EdgeConstraint, Point};
+use crate::point::{ContinuousityType, EdgeConstraint, Point};
 
 const POINT_WIDTH: f32 = 4.0;
 const BEZIER_POINT_COLOR: Color32 = Color32::from_rgb(252, 15, 192);
-const BEZIER_CURVE_COLOR: Color32 = Color32::from_rgb(0, 255, 255);
 
 pub struct Drawer;
 
 impl Drawer {
-    pub fn draw_points(points: &[Point], painter: &egui::Painter, color: Color32) {
-        #[allow(unused_variables)]
+    pub fn draw_points(
+        points: &[Point],
+        selected_point: Option<usize>,
+        painter: &egui::Painter,
+        color: Color32,
+        special_color: Color32,
+    ) {
         for (id, point) in points.iter().enumerate() {
+            let current_color = if id == selected_point.unwrap_or(usize::MAX) {
+                special_color
+            } else {
+                color
+            };
+
             painter.circle(
                 *point.pos(),
                 POINT_WIDTH,
-                color,
+                current_color,
                 egui::Stroke {
-                    color,
+                    color: current_color,
                     width: POINT_WIDTH,
                 },
             );
+            if Point::is_part_of_bezier_segment(points, id) {
+                Self::draw_point_info(point, painter);
+            }
             #[cfg(feature = "show_debug_info")]
             {
                 painter.text(
@@ -36,6 +49,7 @@ impl Drawer {
 
     pub fn draw_polygon_builtin(
         points: &[Point],
+        selected_point: Option<usize>,
         selected_edge_start_index: Option<usize>,
         painter: &egui::Painter,
         color: Color32,
@@ -43,22 +57,26 @@ impl Drawer {
         width: f32,
     ) {
         for id in 0..points.len() {
-            let current_color = if id == selected_edge_start_index.unwrap_or(usize::MAX) {
+            let current_color = if id == selected_edge_start_index.unwrap_or(usize::MAX)
+                || (id == selected_point.unwrap_or(usize::MAX)
+                    && points[id].is_start_of_bezier_segment())
+            {
                 special_color
             } else {
                 color
             };
             let id_next = Point::get_next_index(points, id);
-            painter.line_segment(
-                [*points[id].pos(), *points[id_next].pos()],
-                egui::Stroke {
-                    color: current_color,
-                    width,
-                },
-            );
-            Self::draw_edge_info(points, id, painter);
             if points[id].is_start_of_bezier_segment() {
-                Self::draw_brezier_segment(&points[id], &points[id_next], painter);
+                Self::draw_brezier_segment(&points[id], &points[id_next], painter, current_color);
+            } else {
+                painter.line_segment(
+                    [*points[id].pos(), *points[id_next].pos()],
+                    egui::Stroke {
+                        color: current_color,
+                        width,
+                    },
+                );
+                Self::draw_edge_info(points, id, painter);
             }
         }
     }
@@ -85,6 +103,7 @@ impl Drawer {
 
     pub fn draw_polygon_bresenham(
         points: &[Point],
+        selected_point: Option<usize>,
         selected_edge_start_index: Option<usize>,
         painter: &egui::Painter,
         color: Color32,
@@ -92,22 +111,26 @@ impl Drawer {
     ) {
         const WIDTH: f32 = 1.0;
         for id in 0..points.len() {
-            let current_color = if id == selected_edge_start_index.unwrap_or(usize::MAX) {
+            let current_color = if id == selected_edge_start_index.unwrap_or(usize::MAX)
+                || (id == selected_point.unwrap_or(usize::MAX)
+                    && points[id].is_start_of_bezier_segment())
+            {
                 special_color
             } else {
                 color
             };
             let id_next = Point::get_next_index(points, id);
-            Self::draw_line_bresenham(
-                painter,
-                current_color,
-                points[id].pos(),
-                points[id_next].pos(),
-                WIDTH,
-            );
-            Self::draw_edge_info(points, id, painter);
             if points[id].is_start_of_bezier_segment() {
-                Self::draw_brezier_segment(&points[id], &points[id_next], painter);
+                Self::draw_brezier_segment(&points[id], &points[id_next], painter, current_color);
+            } else {
+                Self::draw_line_bresenham(
+                    painter,
+                    current_color,
+                    points[id].pos(),
+                    points[id_next].pos(),
+                    WIDTH,
+                );
+                Self::draw_edge_info(points, id, painter);
             }
         }
     }
@@ -170,6 +193,24 @@ impl Drawer {
                 Color32::WHITE,
             );
         }
+    }
+
+    fn draw_point_info(point: &Point, painter: &egui::Painter) {
+        let text = match point.continuousity_type() {
+            ContinuousityType::G0 => "G0",
+            ContinuousityType::C1 => "C1",
+            ContinuousityType::G1 => "G1",
+        };
+
+        let pos = *point.pos() + egui::Vec2::new(10.0, 10.0);
+
+        painter.text(
+            pos,
+            egui::Align2::CENTER_TOP,
+            text,
+            egui::FontId::monospace(18.0),
+            Color32::LIGHT_BLUE,
+        );
     }
 
     fn draw_line_bresenham(
@@ -331,7 +372,7 @@ impl Drawer {
         }
     }
 
-    fn draw_brezier_segment(start: &Point, end: &Point, painter: &egui::Painter) {
+    fn draw_brezier_segment(start: &Point, end: &Point, painter: &egui::Painter, color: Color32) {
         let bezier_data = start
             .bezier_data()
             .expect("draw_bezier_segment should only be call for point with bezier data");
@@ -348,8 +389,8 @@ impl Drawer {
             );
         }
         let all_points = [*start.pos(), inner_points[0], inner_points[1], *end.pos()];
-        for id in 0..all_points.len() {
-            let id_next = (id + 1) % all_points.len();
+        for id in 0..all_points.len() - 1 {
+            let id_next = id + 1;
             Self::draw_dashed_line_bresenham(
                 painter,
                 Color32::GRAY,
@@ -363,7 +404,7 @@ impl Drawer {
             let next_id = id + 1;
             Self::draw_line_bresenham(
                 painter,
-                BEZIER_CURVE_COLOR,
+                color,
                 &curve_points[id],
                 &curve_points[next_id],
                 1.0,

@@ -29,11 +29,15 @@ pub struct PolygonEditor {
     polygon_dragged_index: Option<usize>,
     /// Id of edge (meaning id of the first vertex of it) currently selected for context menu
     selected_edge_start_index: Option<usize>,
+    /// Id of point currently selected for context menu
+    selected_point_index: Option<usize>,
     /// Data related to all popups
     popups: Popups,
 }
 
 impl PolygonEditor {
+    const CONTEXT_MENU_MIN_WDITH: f32 = 150.0;
+
     pub fn new_with_drawing_mode() -> Self {
         Self {
             polygon_mode: PolygonMode::Drawing,
@@ -135,19 +139,30 @@ impl PolygonEditor {
         }
     }
 
-    pub fn handle_selecting_edge(&mut self, ctx: &egui::Context) {
+    pub fn handle_selecting_edge_or_point(&mut self, ctx: &egui::Context) {
         let mouse_pos = ctx.pointer_hover_pos();
         if let Some(pos) = mouse_pos {
             if ctx.input(|i| i.pointer.button_down(egui::PointerButton::Secondary)) {
-                let mut selected_now = false;
+                let mut edge_selected_now = false;
+                let mut point_selected_now = false;
                 for id in 0..self.points.len() {
+                    if self.points[id].pos().distance(pos) < 10.0
+                        && Point::is_part_of_bezier_segment(&self.points, id)
+                    {
+                        self.selected_point_index = Some(id);
+                        point_selected_now = true;
+                        break;
+                    }
                     if Point::contains_point(&self.points, id, &pos) {
                         self.selected_edge_start_index = Some(id);
-                        selected_now = true;
+                        edge_selected_now = true;
                         break;
                     }
                 }
-                if !selected_now {
+                if !point_selected_now {
+                    self.selected_point_index = None;
+                }
+                if !edge_selected_now {
                     self.selected_edge_start_index = None;
                 }
             }
@@ -176,7 +191,6 @@ impl PolygonEditor {
     }
 
     pub fn show_context_menu_for_selected_edge(&mut self, ctx: &egui::Context, ui: &egui::Ui) {
-        const CONTEXT_MENU_MIN_WDITH: f32 = 150.0;
         if let Some(selected_id) = self.selected_edge_start_index {
             let can_add_constraint_or_bezier_segment = !self.points[selected_id].has_constraint()
                 && !self.points[selected_id].is_start_of_bezier_segment();
@@ -190,7 +204,7 @@ impl PolygonEditor {
                 &self.points[selected_id],
                 &self.points[Point::get_next_index(&self.points, selected_id)],
             ) - Vec2::new(
-                CONTEXT_MENU_MIN_WDITH / 2.0,
+                Self::CONTEXT_MENU_MIN_WDITH / 2.0,
                 ui.spacing().interact_size.y * number_of_buttons as f32 / 2.0,
             );
             egui::containers::Area::new("edge_context_menu".into())
@@ -201,7 +215,7 @@ impl PolygonEditor {
                         .inner_margin(0.0)
                         .fill(Color32::TRANSPARENT)
                         .show(ui, |ui| {
-                            ui.set_min_width(CONTEXT_MENU_MIN_WDITH);
+                            ui.set_min_width(Self::CONTEXT_MENU_MIN_WDITH);
                             ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
                             ui.with_layout(
                                 egui::Layout::top_down_justified(egui::Align::LEFT),
@@ -221,7 +235,7 @@ impl PolygonEditor {
                                         // Bezier button
                                         if ui
                                             .add(
-                                                egui::Button::new("Add bezier segment")
+                                                egui::Button::new("Change into bezier segment")
                                                     .rounding(Rounding::ZERO),
                                             )
                                             .clicked()
@@ -330,21 +344,77 @@ impl PolygonEditor {
                                             self.points[selected_id].remove_constraint();
                                             self.selected_edge_start_index = None;
                                         }
-                                    } else if self.points[selected_id].is_start_of_bezier_segment()
+                                    }
+                                },
+                            );
+                        });
+                });
+        }
+    }
+
+    pub fn show_context_menu_for_selected_point(&mut self, ctx: &egui::Context) {
+        // Only dispaly context menu for point that is either start or end of bezier segment
+        if let Some(selected_id) = self.selected_point_index {
+            if !Point::is_part_of_bezier_segment(&self.points, selected_id) {
+                return;
+            }
+
+            let container_pos = *self.points[selected_id].pos() + Vec2::new(10.0, 10.0);
+            let display_remove_bezier_button =
+                self.points[selected_id].is_start_of_bezier_segment();
+
+            egui::containers::Area::new("edge_context_menu".into())
+                .fixed_pos(container_pos)
+                .show(ctx, |ui| {
+                    egui::Frame::popup(ui.style())
+                        .outer_margin(0.0)
+                        .inner_margin(0.0)
+                        .fill(Color32::TRANSPARENT)
+                        .show(ui, |ui| {
+                            ui.set_min_width(Self::CONTEXT_MENU_MIN_WDITH);
+                            ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
+                            ui.with_layout(
+                                egui::Layout::top_down_justified(egui::Align::LEFT),
+                                |ui| {
+                                    // G0 button
+                                    if ui
+                                        .add(egui::Button::new("Apply G0").rounding(Rounding {
+                                            sw: 0.0,
+                                            se: 0.0,
+                                            ..Default::default()
+                                        }))
+                                        .clicked()
                                     {
-                                        let response = ui.add(
-                                            egui::Button::new("Remove bezier segment").rounding(
-                                                Rounding {
-                                                    nw: 0.0,
-                                                    ne: 0.0,
-                                                    ..Default::default()
-                                                },
-                                            ),
-                                        );
-                                        if response.clicked() {
-                                            self.points[selected_id].remove_bezier_data();
-                                            self.selected_edge_start_index = None;
-                                        }
+                                        self.points[selected_id].apply_G0();
+                                        self.selected_point_index = None;
+                                    }
+                                    // G1 button
+                                    if ui
+                                        .add(egui::Button::new("Apply G1").rounding(Rounding::ZERO))
+                                        .clicked()
+                                    {
+                                        self.points[selected_id].apply_G1();
+                                        self.selected_point_index = None;
+                                    }
+                                    // C1 button
+                                    if ui
+                                        .add(egui::Button::new("Apply C1").rounding(Rounding::ZERO))
+                                        .clicked()
+                                    {
+                                        self.points[selected_id].apply_C1();
+                                        self.selected_point_index = None;
+                                    }
+                                    // Remove bezier segment button
+                                    if display_remove_bezier_button
+                                        && ui
+                                            .add(
+                                                egui::Button::new("Remove bezier segment")
+                                                    .rounding(Rounding::ZERO),
+                                            )
+                                            .clicked()
+                                    {
+                                        self.points[selected_id].remove_bezier_data();
+                                        self.selected_point_index = None;
                                     }
                                 },
                             );
@@ -369,6 +439,7 @@ impl Default for PolygonEditor {
             bezier_control_point_dragged: None,
             polygon_dragged_index: None,
             selected_edge_start_index: None,
+            selected_point_index: None,
             popups: Popups::default(),
         }
     }
@@ -432,7 +503,13 @@ impl eframe::App for PolygonEditor {
                             )
                         }
                     };
-                    Drawer::draw_points(&self.points, painter, Color32::DARK_BLUE);
+                    Drawer::draw_points(
+                        &self.points,
+                        None,
+                        painter,
+                        Color32::DARK_BLUE,
+                        Color32::DARK_GREEN,
+                    );
                     // LMB on plane
                     self.handle_adding_point_in_drawing_mode(ctx, ui.min_rect().width());
                 }
@@ -441,6 +518,7 @@ impl eframe::App for PolygonEditor {
                     match self.line_drawing_algorithm {
                         LineDrawingAlgorithm::Bultin => Drawer::draw_polygon_builtin(
                             &self.points,
+                            self.selected_point_index,
                             self.selected_edge_start_index,
                             painter,
                             Color32::LIGHT_GREEN,
@@ -449,22 +527,30 @@ impl eframe::App for PolygonEditor {
                         ),
                         LineDrawingAlgorithm::Bresenham => Drawer::draw_polygon_bresenham(
                             &self.points,
+                            self.selected_point_index,
                             self.selected_edge_start_index,
                             painter,
                             Color32::YELLOW,
                             Color32::ORANGE,
                         ),
                     };
-                    Drawer::draw_points(&self.points, painter, Color32::DARK_BLUE);
+                    Drawer::draw_points(
+                        &self.points,
+                        self.selected_point_index,
+                        painter,
+                        Color32::DARK_BLUE,
+                        Color32::DARK_GREEN,
+                    );
                     // ctrl + LMB on point
                     self.handle_dragging_polygon(ctx);
                     // alt + LMB on point
                     self.handle_removing_point(ctx);
                     // LMB on point
                     self.handle_dragging_points(ctx);
-                    // RMB on edge
-                    self.handle_selecting_edge(ctx);
+                    // RMB on edge/point
+                    self.handle_selecting_edge_or_point(ctx);
                     self.show_context_menu_for_selected_edge(ctx, ui);
+                    self.show_context_menu_for_selected_point(ctx);
                 }
             }
         });

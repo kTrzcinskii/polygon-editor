@@ -27,19 +27,24 @@ impl BezierData {
     /// Returns point on bezier curve. For this usecase it should be enough to just draw straight lines between these points.
     pub fn get_bezier_curve_points(&self, start: &Point, end: &Point) -> Vec<Pos2> {
         let polynomial_base = self.bezier_point_in_polynomial_base(start, end);
-        let points_count = start.pos().distance(*end.pos()) * 2.0;
-        let step_diff = 1.0 / points_count;
+        let points_count = start.pos().distance(*end.pos()) * 6.0;
+        let d = 1.0 / points_count;
         let mut points = Vec::with_capacity(points_count as usize);
-        points.push(*start.pos());
-        for i in 1..(points_count as usize - 1) {
-            let t = i as f32 * step_diff;
-            let p = ((polynomial_base[3] * t + polynomial_base[2].to_vec2()) * t
-                + polynomial_base[1].to_vec2())
-                * t
-                + polynomial_base[0].to_vec2();
+        let mut t = 0.0;
+        let mut p = polynomial_base[0];
+        let mut p_delta = d
+            * (polynomial_base[1]
+                + d * (polynomial_base[2] + d * polynomial_base[3].to_vec2()).to_vec2());
+        let mut p2_delta =
+            2.0 * d * d * (3.0 * polynomial_base[3] * d + polynomial_base[2].to_vec2());
+        let p3_delta = 6.0 * d * d * d * polynomial_base[3];
+        while t <= 1.0 {
             points.push(p);
+            p += p_delta.to_vec2();
+            p_delta += p2_delta.to_vec2();
+            p2_delta += p3_delta.to_vec2();
+            t += d;
         }
-        points.push(*end.pos());
         points
     }
 

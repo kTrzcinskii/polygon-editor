@@ -188,8 +188,6 @@ impl Point {
     }
 
     // TODO:
-    // - when moving edge move point that is either start or end of bezier segment than we should properly move
-    // control points (currently they are moved only when dragging start/end of bezier segment)
     // - should properly handle C1 and G1
     pub fn adjust_adjacent_edges_after_position_update(points: &mut [Point], point_index: usize) {
         #[cfg(feature = "show_debug_info")]
@@ -263,7 +261,13 @@ impl Point {
                 "Adjust edge (from start point): {}-{}",
                 edge_start_index, edge_end_index
             );
+            let previous_pos = *points[edge_end_index].pos();
             Self::apply_constraint_diff(points, edge_end_index, edge_start_index, &constraint);
+            Self::adjust_adjacent_bezier_segments_control_points(
+                points,
+                edge_end_index,
+                previous_pos,
+            );
         }
     }
 
@@ -276,7 +280,13 @@ impl Point {
                 "Adjust edge (from end point): {}-{}",
                 edge_start_index, edge_end_index
             );
+            let previous_pos = *points[edge_start_index].pos();
             Self::apply_constraint_diff(points, edge_start_index, edge_end_index, &constraint);
+            Self::adjust_adjacent_bezier_segments_control_points(
+                points,
+                edge_start_index,
+                previous_pos,
+            );
         }
     }
 

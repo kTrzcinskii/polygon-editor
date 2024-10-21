@@ -83,6 +83,10 @@ impl Point {
         }
     }
 
+    pub fn has_horizontal_or_vertical_constraint(&self) -> bool {
+        self.has_horizontal_constraint() || self.has_vertical_constraint()
+    }
+
     pub fn is_start_of_bezier_segment(&self) -> bool {
         self.bezier_data.is_some()
     }
@@ -250,35 +254,60 @@ impl Point {
         [new_c0, new_c1]
     }
 
+    // TODO: the logic in following two functions is mostly the same, and in each match branch
+    // logic is also very similiar
+    // it looks like it could be extracted to some common function
+
+    // FIXME: cannot move second inner point in case of two bezier segment that share g1 point
+
     /// We adjust edge so that point with index `edge_end_index` keeps G1 continuity
     /// We assume that `edge_end_index` is start of bezier segment
     fn adjust_g1_coninuity_edge_end(points: &mut [Point], edge_end_index: usize) {
         // We have
         // edge <-> bezier segment
-        let bs_data = points[edge_end_index]
-            .bezier_data()
-            .expect("It should be called only for start of bezier segment");
-        let bs_vector = bs_data.inner_points()[0] - *points[edge_end_index].pos();
-
         let edge_start_index = Self::get_previous_index(points, edge_end_index);
-        let is_bezier_segment = points[edge_start_index].is_start_of_bezier_segment();
-        let e_vector_length = match is_bezier_segment {
+        match points[edge_start_index].has_horizontal_or_vertical_constraint() {
             true => {
-                let bs = points[edge_start_index].bezier_data().unwrap();
-                bs.inner_points()[1].distance(*points[edge_end_index].pos())
+                let edge_vector = *points[edge_start_index].pos() - *points[edge_end_index].pos();
+                let bs_data = points[edge_end_index]
+                    .bezier_data()
+                    .expect("It should be called only for start of bezier segment");
+                let bs_vector_length =
+                    bs_data.inner_points()[0].distance(*points[edge_end_index].pos());
+                let new_point =
+                    *points[edge_end_index].pos() - edge_vector.normalized() * bs_vector_length;
+                let bs_data = points[edge_end_index]
+                    .bezier_data_mut()
+                    .expect("It should be called only for start of bezier segment");
+                bs_data.update_inner_point_position(0, new_point);
             }
-            false => points[edge_end_index]
-                .pos()
-                .distance(*points[edge_start_index].pos()),
+            false => {
+                let bs_data = points[edge_end_index]
+                    .bezier_data()
+                    .expect("It should be called only for start of bezier segment");
+                let bs_vector = bs_data.inner_points()[0] - *points[edge_end_index].pos();
+
+                let is_bezier_segment = points[edge_start_index].is_start_of_bezier_segment();
+                let e_vector_length = match is_bezier_segment {
+                    true => {
+                        let bs = points[edge_start_index].bezier_data().unwrap();
+                        bs.inner_points()[1].distance(*points[edge_end_index].pos())
+                    }
+                    false => points[edge_end_index]
+                        .pos()
+                        .distance(*points[edge_start_index].pos()),
+                };
+                let new_point =
+                    *points[edge_end_index].pos() - bs_vector.normalized() * e_vector_length;
+                match is_bezier_segment {
+                    true => {
+                        let bs = points[edge_start_index].bezier_data_mut().unwrap();
+                        bs.update_inner_point_position(1, new_point);
+                    }
+                    false => *points[edge_start_index].pos_mut() = new_point,
+                }
+            }
         };
-        let new_point = *points[edge_end_index].pos() - bs_vector.normalized() * e_vector_length;
-        match is_bezier_segment {
-            true => {
-                let bs = points[edge_start_index].bezier_data_mut().unwrap();
-                bs.update_inner_point_position(1, new_point);
-            }
-            false => *points[edge_start_index].pos_mut() = new_point,
-        }
     }
 
     /// We adjust edge so that point with index `edge_start_index` keeps G1 continuity
@@ -286,31 +315,51 @@ impl Point {
     fn adjust_g1_coninuity_edge_start(points: &mut [Point], edge_start_index: usize) {
         // We have
         // bezier segment <-> edge
-        let bs_start_index = Self::get_previous_index(points, edge_start_index);
-        let bs_data = points[bs_start_index]
-            .bezier_data()
-            .expect("It should be called only for start of bezier segment");
-        let bs_vector = bs_data.inner_points()[1] - *points[edge_start_index].pos();
-
         let edge_end_index = Self::get_next_index(points, edge_start_index);
-        let is_bezier_segment = points[edge_start_index].is_start_of_bezier_segment();
-        let e_vector_length = match is_bezier_segment {
+        let bs_start_index = Self::get_previous_index(points, edge_start_index);
+        match points[edge_start_index].has_horizontal_or_vertical_constraint() {
             true => {
-                let bs = points[edge_start_index].bezier_data().unwrap();
-                bs.inner_points()[0].distance(*points[edge_start_index].pos())
+                let edge_vector = *points[edge_end_index].pos() - *points[edge_start_index].pos();
+                let bs_data = points[bs_start_index]
+                    .bezier_data()
+                    .expect("It should be called only for start of bezier segment");
+                let bs_vector_length =
+                    bs_data.inner_points()[1].distance(*points[edge_start_index].pos());
+                let new_point =
+                    *points[edge_start_index].pos() - edge_vector.normalized() * bs_vector_length;
+                let bs_data = points[bs_start_index]
+                    .bezier_data_mut()
+                    .expect("It should be called only for start of bezier segment");
+                bs_data.update_inner_point_position(1, new_point);
             }
-            false => points[edge_end_index]
-                .pos()
-                .distance(*points[edge_start_index].pos()),
+            false => {
+                let bs_start_index = Self::get_previous_index(points, edge_start_index);
+                let bs_data = points[bs_start_index]
+                    .bezier_data()
+                    .expect("It should be called only for start of bezier segment");
+                let bs_vector = bs_data.inner_points()[1] - *points[edge_start_index].pos();
+
+                let is_bezier_segment = points[edge_start_index].is_start_of_bezier_segment();
+                let e_vector_length = match is_bezier_segment {
+                    true => {
+                        let bs = points[edge_start_index].bezier_data().unwrap();
+                        bs.inner_points()[0].distance(*points[edge_start_index].pos())
+                    }
+                    false => points[edge_end_index]
+                        .pos()
+                        .distance(*points[edge_start_index].pos()),
+                };
+                let new_point =
+                    *points[edge_start_index].pos() - bs_vector.normalized() * e_vector_length;
+                match is_bezier_segment {
+                    true => {
+                        let bs = points[edge_start_index].bezier_data_mut().unwrap();
+                        bs.update_inner_point_position(0, new_point);
+                    }
+                    false => *points[edge_end_index].pos_mut() = new_point,
+                }
+            }
         };
-        let new_point = *points[edge_start_index].pos() - bs_vector.normalized() * e_vector_length;
-        match is_bezier_segment {
-            true => {
-                let bs = points[edge_start_index].bezier_data_mut().unwrap();
-                bs.update_inner_point_position(0, new_point);
-            }
-            false => *points[edge_end_index].pos_mut() = new_point,
-        }
     }
 
     // TODO:

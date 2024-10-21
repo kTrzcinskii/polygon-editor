@@ -1,6 +1,6 @@
 use egui::{Color32, Pos2};
 
-use crate::point::{ContinuousityType, EdgeConstraint, Point};
+use crate::point::{ContinuityType, EdgeConstraint, Point};
 
 const POINT_WIDTH: f32 = 4.0;
 const BEZIER_POINT_COLOR: Color32 = Color32::from_rgb(252, 15, 192);
@@ -196,10 +196,10 @@ impl Drawer {
     }
 
     fn draw_point_info(point: &Point, painter: &egui::Painter) {
-        let text = match point.continuousity_type() {
-            ContinuousityType::G0 => "G0",
-            ContinuousityType::C1 => "C1",
-            ContinuousityType::G1 => "G1",
+        let text = match point.continuity_type() {
+            ContinuityType::G0 => "G0",
+            ContinuityType::C1 => "C1",
+            ContinuityType::G1 => "G1",
         };
 
         let pos = *point.pos() + egui::Vec2::new(10.0, 10.0);

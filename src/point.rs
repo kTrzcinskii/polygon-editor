@@ -10,7 +10,7 @@ pub enum EdgeConstraint {
 }
 
 #[derive(Clone, Copy)]
-pub enum ContinuousityType {
+pub enum ContinuityType {
     G0,
     C1,
     G1,
@@ -25,7 +25,7 @@ pub struct Point {
     constraint: Option<EdgeConstraint>,
     /// Data for bezier segment that starts in this point (and ends in the next one)
     bezier_data: Option<BezierData>,
-    continuousity_type: ContinuousityType,
+    continuity_type: ContinuityType,
 }
 
 impl Point {
@@ -34,7 +34,7 @@ impl Point {
             pos,
             constraint: None,
             bezier_data: None,
-            continuousity_type: ContinuousityType::G0,
+            continuity_type: ContinuityType::G0,
         }
     }
 
@@ -104,23 +104,23 @@ impl Point {
         self.bezier_data = None;
     }
 
-    pub fn continuousity_type(&self) -> &ContinuousityType {
-        &self.continuousity_type
+    pub fn continuity_type(&self) -> &ContinuityType {
+        &self.continuity_type
     }
 
     #[allow(non_snake_case)]
     pub fn apply_G0(&mut self) {
-        self.continuousity_type = ContinuousityType::G0;
+        self.continuity_type = ContinuityType::G0;
     }
 
     #[allow(non_snake_case)]
     pub fn apply_G1(&mut self) {
-        self.continuousity_type = ContinuousityType::G1;
+        self.continuity_type = ContinuityType::G1;
     }
 
     #[allow(non_snake_case)]
     pub fn apply_C1(&mut self) {
-        self.continuousity_type = ContinuousityType::C1;
+        self.continuity_type = ContinuityType::C1;
     }
 
     pub fn remove_constraint(&mut self) {
@@ -161,7 +161,8 @@ impl Point {
                 point_index,
                 previous_position,
             );
-        } else if Self::is_end_of_bezier_segment(points, point_index) {
+        }
+        if Self::is_end_of_bezier_segment(points, point_index) {
             Self::adjust_bezier_segment_control_points_from_end(
                 points,
                 point_index,
@@ -180,18 +181,16 @@ impl Point {
         );
         let inner_points = *bezier_data.inner_points();
         let end_index = Self::get_next_index(points, point_index);
-        let initial_distance = previous_position.distance(*points[end_index].pos());
-        let new_distance = points[point_index].pos().distance(*points[end_index].pos());
-        let scale = new_distance / initial_distance;
-        let vector_end_to_c1 = inner_points[1] - *points[end_index].pos();
-        let new_c1 = *points[end_index].pos() + vector_end_to_c1 * scale;
-        let vector_c1_to_c0 = inner_points[0] - inner_points[1];
-        let new_c0 = new_c1 + vector_c1_to_c0 * scale;
+        let new_inner_points = Self::scale_and_rotate_bezier(
+            &previous_position,
+            points[point_index].pos(),
+            &inner_points,
+            points[end_index].pos(),
+        );
         let bezier_data = points[point_index]
             .bezier_data_mut()
             .expect("Should never happen after first check");
-        bezier_data.update_inner_point_position(0, new_c0);
-        bezier_data.update_inner_point_position(1, new_c1);
+        *bezier_data.inner_points_mut() = new_inner_points;
     }
 
     fn adjust_bezier_segment_control_points_from_end(
@@ -204,20 +203,41 @@ impl Point {
             "This function should only be called for point which is the end of bezier segment",
         );
         let inner_points = *bezier_data.inner_points();
-        let initial_distance = previous_position.distance(*points[start_index].pos());
-        let new_distance = points[point_index]
-            .pos()
-            .distance(*points[start_index].pos());
-        let scale = new_distance / initial_distance;
-        let vector_start_to_c0 = inner_points[0] - *points[start_index].pos();
-        let new_c0 = *points[start_index].pos() + vector_start_to_c0 * scale;
-        let vector_c0_to_c1 = inner_points[1] - inner_points[0];
-        let new_c1 = new_c0 + vector_c0_to_c1 * scale;
+        let new_inner_points = Self::scale_and_rotate_bezier(
+            &previous_position,
+            &points[point_index].pos,
+            &inner_points,
+            points[start_index].pos(),
+        );
         let bezier_data = points[start_index]
             .bezier_data_mut()
             .expect("Should never happen after first check");
-        bezier_data.update_inner_point_position(0, new_c0);
-        bezier_data.update_inner_point_position(1, new_c1);
+        *bezier_data.inner_points_mut() = new_inner_points;
+    }
+
+    fn scale_and_rotate_bezier(
+        previous_position: &Pos2,
+        current_position: &Pos2,
+        inner_points: &[Pos2; 2],
+        end_not_moved: &Pos2,
+    ) -> [Pos2; 2] {
+        let initial_distance = previous_position.distance(*end_not_moved);
+        let new_distance = current_position.distance(*end_not_moved);
+        let scale = new_distance / initial_distance;
+        let new_angle = (*current_position - *end_not_moved).angle();
+        let previos_angle = (*previous_position - *end_not_moved).angle();
+        let angle_diff = new_angle - previos_angle;
+        let c0_new_angle = (inner_points[0] - *end_not_moved).angle() + angle_diff;
+        let new_c0 =
+            (Vec2::angled(c0_new_angle) * (inner_points[0] - *end_not_moved).length() * scale)
+                .to_pos2()
+                + end_not_moved.to_vec2();
+        let c1_new_angle = (inner_points[1] - *end_not_moved).angle() + angle_diff;
+        let new_c1 =
+            (Vec2::angled(c1_new_angle) * (inner_points[1] - *end_not_moved).length() * scale)
+                .to_pos2()
+                + end_not_moved.to_vec2();
+        [new_c0, new_c1]
     }
 
     // TODO:

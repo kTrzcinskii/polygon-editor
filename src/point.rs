@@ -150,7 +150,7 @@ impl Point {
         Self::adjust_adjacent_edges_after_position_update(points, point_index);
     }
 
-    pub fn adjust_adjacent_bezier_segments_control_points(
+    fn adjust_adjacent_bezier_segments_control_points(
         points: &mut [Point],
         point_index: usize,
         previous_position: Pos2,
@@ -191,6 +191,11 @@ impl Point {
             .bezier_data_mut()
             .expect("Should never happen after first check");
         *bezier_data.inner_points_mut() = new_inner_points;
+        match points[point_index].continuity_type() {
+            ContinuityType::G0 => {}
+            ContinuityType::C1 => todo!(),
+            ContinuityType::G1 => Self::adjust_g1_coninuity_edge_end(points, point_index),
+        }
     }
 
     fn adjust_bezier_segment_control_points_from_end(
@@ -213,6 +218,11 @@ impl Point {
             .bezier_data_mut()
             .expect("Should never happen after first check");
         *bezier_data.inner_points_mut() = new_inner_points;
+        match points[point_index].continuity_type() {
+            ContinuityType::G0 => {}
+            ContinuityType::C1 => todo!(),
+            ContinuityType::G1 => Self::adjust_g1_coninuity_edge_start(points, point_index),
+        }
     }
 
     fn scale_and_rotate_bezier(
@@ -240,6 +250,69 @@ impl Point {
         [new_c0, new_c1]
     }
 
+    /// We adjust edge so that point with index `edge_end_index` keeps G1 continuity
+    /// We assume that `edge_end_index` is start of bezier segment
+    fn adjust_g1_coninuity_edge_end(points: &mut [Point], edge_end_index: usize) {
+        // We have
+        // edge <-> bezier segment
+        let bs_data = points[edge_end_index]
+            .bezier_data()
+            .expect("It should be called only for start of bezier segment");
+        let bs_vector = bs_data.inner_points()[0] - *points[edge_end_index].pos();
+
+        let edge_start_index = Self::get_previous_index(points, edge_end_index);
+        let is_bezier_segment = points[edge_start_index].is_start_of_bezier_segment();
+        let e_vector_length = match is_bezier_segment {
+            true => {
+                let bs = points[edge_start_index].bezier_data().unwrap();
+                bs.inner_points()[1].distance(*points[edge_end_index].pos())
+            }
+            false => points[edge_end_index]
+                .pos()
+                .distance(*points[edge_start_index].pos()),
+        };
+        let new_point = *points[edge_end_index].pos() - bs_vector.normalized() * e_vector_length;
+        match is_bezier_segment {
+            true => {
+                let bs = points[edge_start_index].bezier_data_mut().unwrap();
+                bs.update_inner_point_position(1, new_point);
+            }
+            false => *points[edge_start_index].pos_mut() = new_point,
+        }
+    }
+
+    /// We adjust edge so that point with index `edge_start_index` keeps G1 continuity
+    /// We assume that `edge_start_index` is start of bezier segment
+    fn adjust_g1_coninuity_edge_start(points: &mut [Point], edge_start_index: usize) {
+        // We have
+        // bezier segment <-> edge
+        let bs_start_index = Self::get_previous_index(points, edge_start_index);
+        let bs_data = points[bs_start_index]
+            .bezier_data()
+            .expect("It should be called only for start of bezier segment");
+        let bs_vector = bs_data.inner_points()[1] - *points[edge_start_index].pos();
+
+        let edge_end_index = Self::get_next_index(points, edge_start_index);
+        let is_bezier_segment = points[edge_start_index].is_start_of_bezier_segment();
+        let e_vector_length = match is_bezier_segment {
+            true => {
+                let bs = points[edge_start_index].bezier_data().unwrap();
+                bs.inner_points()[0].distance(*points[edge_start_index].pos())
+            }
+            false => points[edge_end_index]
+                .pos()
+                .distance(*points[edge_start_index].pos()),
+        };
+        let new_point = *points[edge_start_index].pos() - bs_vector.normalized() * e_vector_length;
+        match is_bezier_segment {
+            true => {
+                let bs = points[edge_start_index].bezier_data_mut().unwrap();
+                bs.update_inner_point_position(0, new_point);
+            }
+            false => *points[edge_end_index].pos_mut() = new_point,
+        }
+    }
+
     // TODO:
     // - should properly handle C1 and G1
     pub fn adjust_adjacent_edges_after_position_update(points: &mut [Point], point_index: usize) {
@@ -250,7 +323,8 @@ impl Point {
         }
 
         let mut left = point_index;
-        let mut left_stop = !points[Self::get_previous_index(points, left)].has_constraint();
+        let mut left_stop = !points[Self::get_previous_index(points, left)].has_constraint()
+            && !Self::is_part_of_bezier_segment(points, left);
 
         #[allow(unused_variables)]
         let mut i_left = 0;
@@ -267,7 +341,13 @@ impl Point {
                 points[left].has_constraint() && points[next_edge_start].has_width_constraint();
             let width_contraint_and_next_constraint =
                 points[left].has_width_constraint() && points[next_edge_start].has_constraint();
-            if !constraint_and_next_width_constraint && !width_contraint_and_next_constraint {
+            let is_bezier_segment_or_next_bezier_segment =
+                Self::is_part_of_bezier_segment(points, left)
+                    || Self::is_part_of_bezier_segment(points, next_edge_start);
+            if !constraint_and_next_width_constraint
+                && !width_contraint_and_next_constraint
+                && !is_bezier_segment_or_next_bezier_segment
+            {
                 #[cfg(feature = "show_debug_info")]
                 println!("Left stops at: {}", left);
                 left_stop = true;
@@ -276,7 +356,8 @@ impl Point {
         }
 
         let mut right = point_index;
-        let mut right_stop = !points[right].has_constraint();
+        let mut right_stop =
+            !points[right].has_constraint() && !Self::is_part_of_bezier_segment(points, right);
 
         #[allow(unused_variables)]
         let mut i_right = 0;
@@ -295,8 +376,14 @@ impl Point {
                 points[current_edge_index].has_constraint() && points[right].has_width_constraint();
             let width_contraint_and_next_constraint =
                 points[current_edge_index].has_width_constraint() && points[right].has_constraint();
+            let is_bezier_segment_or_next_bezier_segment =
+                Self::is_part_of_bezier_segment(points, current_edge_index)
+                    || Self::is_part_of_bezier_segment(points, right);
 
-            if !constraint_and_next_width_constraint && !width_contraint_and_next_constraint {
+            if !constraint_and_next_width_constraint
+                && !width_contraint_and_next_constraint
+                && !is_bezier_segment_or_next_bezier_segment
+            {
                 #[cfg(feature = "show_debug_info")]
                 println!("Right stops at: {}", right);
                 right_stop = true;
@@ -307,40 +394,36 @@ impl Point {
 
     fn adjust_moved_point_edge_start(points: &mut [Point], edge_start_index: usize) {
         let constraint = *points[edge_start_index].constraint();
+        let edge_end_index = Self::get_next_index(points, edge_start_index);
+        let previous_pos = *points[edge_end_index].pos();
         if let Some(constraint) = constraint {
-            let edge_end_index = Self::get_next_index(points, edge_start_index);
             #[cfg(feature = "show_debug_info")]
             println!(
                 "Adjust edge (from start point): {}-{}",
                 edge_start_index, edge_end_index
             );
-            let previous_pos = *points[edge_end_index].pos();
             Self::apply_constraint_diff(points, edge_end_index, edge_start_index, &constraint);
-            Self::adjust_adjacent_bezier_segments_control_points(
-                points,
-                edge_end_index,
-                previous_pos,
-            );
         }
+        Self::adjust_adjacent_bezier_segments_control_points(points, edge_end_index, previous_pos);
     }
 
     fn adjust_moved_point_edge_end(points: &mut [Point], edge_end_index: usize) {
         let edge_start_index = Self::get_previous_index(points, edge_end_index);
         let constraint = *points[edge_start_index].constraint();
+        let previous_pos = *points[edge_start_index].pos();
         if let Some(constraint) = constraint {
             #[cfg(feature = "show_debug_info")]
             println!(
                 "Adjust edge (from end point): {}-{}",
                 edge_start_index, edge_end_index
             );
-            let previous_pos = *points[edge_start_index].pos();
             Self::apply_constraint_diff(points, edge_start_index, edge_end_index, &constraint);
-            Self::adjust_adjacent_bezier_segments_control_points(
-                points,
-                edge_start_index,
-                previous_pos,
-            );
         }
+        Self::adjust_adjacent_bezier_segments_control_points(
+            points,
+            edge_start_index,
+            previous_pos,
+        );
     }
 
     fn apply_constraint_diff(

@@ -58,7 +58,12 @@ impl PolygonEditor {
                     self.bezier_control_point_dragged
                 {
                     match self.points[point_index].bezier_data_mut() {
-                        Some(bd) => bd.update_inner_point_position(inner_point_index, pos),
+                        Some(bd) => {
+                            bd.update_inner_point_position(inner_point_index, pos);
+                            let same_pos = *self.points[point_index].pos();
+                            Point::update_position(&mut self.points, point_index, same_pos);
+                        }
+
                         None => eprintln!(
                             "Trying to move bezier control point for point without bezier segment"
                         ),
@@ -250,6 +255,13 @@ impl PolygonEditor {
                                                 );
                                             self.points[selected_id]
                                                 .init_bezier_data(initial_points);
+                                            self.points[selected_id].apply_G0();
+                                            let same_pos = *self.points[selected_id].pos();
+                                            Point::update_position(
+                                                &mut self.points,
+                                                selected_id,
+                                                same_pos,
+                                            );
                                             self.selected_edge_start_index = None;
                                         }
                                         // Horizontal button
@@ -265,9 +277,12 @@ impl PolygonEditor {
                                             .clicked()
                                         {
                                             self.points[selected_id].apply_horizontal_constraint();
-                                            Point::adjust_adjacent_edges_after_position_update(
+                                            self.points[selected_id].apply_G0();
+                                            let same_pos = *self.points[selected_id].pos();
+                                            Point::update_position(
                                                 &mut self.points,
                                                 selected_id,
+                                                same_pos,
                                             );
                                             self.selected_edge_start_index = None;
                                         }
@@ -284,9 +299,12 @@ impl PolygonEditor {
                                             .clicked()
                                         {
                                             self.points[selected_id].apply_vertical_constraint();
-                                            Point::adjust_adjacent_edges_after_position_update(
+                                            self.points[selected_id].apply_G0();
+                                            let same_pos = *self.points[selected_id].pos();
+                                            Point::update_position(
                                                 &mut self.points,
                                                 selected_id,
+                                                same_pos,
                                             );
                                             self.selected_edge_start_index = None;
                                         }
@@ -323,9 +341,12 @@ impl PolygonEditor {
                                                 self.popups.const_width_constraint_user_input();
                                             self.points[selected_id]
                                                 .apply_width_constraint(new_width);
-                                            Point::adjust_adjacent_edges_after_position_update(
+                                            self.points[selected_id].apply_G0();
+                                            let same_pos = *self.points[selected_id].pos();
+                                            Point::update_position(
                                                 &mut self.points,
                                                 selected_id,
+                                                same_pos,
                                             );
                                             self.selected_edge_start_index = None;
                                             self.popups.reset_const_width_constraint_submitted();
@@ -386,6 +407,12 @@ impl PolygonEditor {
                                         .clicked()
                                     {
                                         self.points[selected_id].apply_G0();
+                                        let same_pos = *self.points[selected_id].pos();
+                                        Point::update_position(
+                                            &mut self.points,
+                                            selected_id,
+                                            same_pos,
+                                        );
                                         self.selected_point_index = None;
                                     }
                                     // G1 button
@@ -394,6 +421,12 @@ impl PolygonEditor {
                                         .clicked()
                                     {
                                         self.points[selected_id].apply_G1();
+                                        let same_pos = *self.points[selected_id].pos();
+                                        Point::update_position(
+                                            &mut self.points,
+                                            selected_id,
+                                            same_pos,
+                                        );
                                         self.selected_point_index = None;
                                     }
                                     // C1 button
@@ -402,6 +435,12 @@ impl PolygonEditor {
                                         .clicked()
                                     {
                                         self.points[selected_id].apply_C1();
+                                        let same_pos = *self.points[selected_id].pos();
+                                        Point::update_position(
+                                            &mut self.points,
+                                            selected_id,
+                                            same_pos,
+                                        );
                                         self.selected_point_index = None;
                                     }
                                     // Remove bezier segment button
@@ -414,6 +453,13 @@ impl PolygonEditor {
                                             .clicked()
                                     {
                                         self.points[selected_id].remove_bezier_data();
+                                        let same_pos = *self.points[selected_id].pos();
+                                        Point::update_position(
+                                            &mut self.points,
+                                            selected_id,
+                                            same_pos,
+                                        );
+
                                         self.selected_point_index = None;
                                     }
                                 },

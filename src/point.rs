@@ -150,6 +150,22 @@ impl Point {
             points,
             point_index,
             previous_position,
+            0,
+        );
+        Self::adjust_adjacent_edges_after_position_update(points, point_index);
+    }
+
+    pub fn update_position_after_control_point_moved(
+        points: &mut [Point],
+        point_index: usize,
+        inner_point_index: usize,
+    ) {
+        let previous_position = *points[point_index].pos();
+        Self::adjust_adjacent_bezier_segments_control_points(
+            points,
+            point_index,
+            previous_position,
+            inner_point_index,
         );
         Self::adjust_adjacent_edges_after_position_update(points, point_index);
     }
@@ -158,20 +174,44 @@ impl Point {
         points: &mut [Point],
         point_index: usize,
         previous_position: Pos2,
+        moved_control_point_id: usize,
     ) {
-        if points[point_index].is_start_of_bezier_segment() {
-            Self::adjust_bezier_segment_control_points_from_start(
-                points,
-                point_index,
-                previous_position,
-            );
-        }
-        if Self::is_end_of_bezier_segment(points, point_index) {
-            Self::adjust_bezier_segment_control_points_from_end(
-                points,
-                point_index,
-                previous_position,
-            );
+        match moved_control_point_id {
+            0 => {
+                if points[point_index].is_start_of_bezier_segment() {
+                    Self::adjust_bezier_segment_control_points_from_start(
+                        points,
+                        point_index,
+                        previous_position,
+                    );
+                }
+
+                if Self::is_end_of_bezier_segment(points, point_index) {
+                    Self::adjust_bezier_segment_control_points_from_end(
+                        points,
+                        point_index,
+                        previous_position,
+                    );
+                }
+            }
+            1 => {
+                if Self::is_end_of_bezier_segment(points, point_index) {
+                    Self::adjust_bezier_segment_control_points_from_end(
+                        points,
+                        point_index,
+                        previous_position,
+                    );
+                }
+
+                if points[point_index].is_start_of_bezier_segment() {
+                    Self::adjust_bezier_segment_control_points_from_start(
+                        points,
+                        point_index,
+                        previous_position,
+                    );
+                }
+            }
+            _ => eprintln!("Moved control point id should never be greater than 1"),
         }
     }
 
@@ -257,8 +297,6 @@ impl Point {
     // TODO: the logic in following two functions is mostly the same, and in each match branch
     // logic is also very similiar
     // it looks like it could be extracted to some common function
-
-    // FIXME: cannot move second inner point in case of two bezier segment that share g1 point
 
     /// We adjust edge so that point with index `edge_end_index` keeps G1 continuity
     /// We assume that `edge_end_index` is start of bezier segment
@@ -363,14 +401,25 @@ impl Point {
     }
 
     // TODO:
-    // - should properly handle C1 and G1
-    pub fn adjust_adjacent_edges_after_position_update(points: &mut [Point], point_index: usize) {
+    // - should properly handle C1
+    fn adjust_adjacent_edges_after_position_update(points: &mut [Point], point_index: usize) {
         #[cfg(feature = "show_debug_info")]
         {
             println!("================================================");
-            println!("Starting adjustment process from: {}", point_index);
+            println!(
+                "Starting adjustment process (left first) from: {}",
+                point_index
+            );
         }
 
+        Self::adjust_adjacent_edges_after_position_update_only_left(points, point_index);
+        Self::adjust_adjacent_edges_after_position_update_only_right(points, point_index);
+    }
+
+    fn adjust_adjacent_edges_after_position_update_only_left(
+        points: &mut [Point],
+        point_index: usize,
+    ) {
         let mut left = point_index;
         let mut left_stop = !points[Self::get_previous_index(points, left)].has_constraint()
             && !Self::is_part_of_bezier_segment(points, left);
@@ -403,7 +452,12 @@ impl Point {
             }
             i_left += 1;
         }
+    }
 
+    fn adjust_adjacent_edges_after_position_update_only_right(
+        points: &mut [Point],
+        point_index: usize,
+    ) {
         let mut right = point_index;
         let mut right_stop =
             !points[right].has_constraint() && !Self::is_part_of_bezier_segment(points, right);
@@ -453,7 +507,12 @@ impl Point {
             );
             Self::apply_constraint_diff(points, edge_end_index, edge_start_index, &constraint);
         }
-        Self::adjust_adjacent_bezier_segments_control_points(points, edge_end_index, previous_pos);
+        Self::adjust_adjacent_bezier_segments_control_points(
+            points,
+            edge_end_index,
+            previous_pos,
+            0,
+        );
     }
 
     fn adjust_moved_point_edge_end(points: &mut [Point], edge_end_index: usize) {
@@ -472,6 +531,7 @@ impl Point {
             points,
             edge_start_index,
             previous_pos,
+            0,
         );
     }
 

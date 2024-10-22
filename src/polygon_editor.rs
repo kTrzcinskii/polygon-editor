@@ -60,8 +60,16 @@ impl PolygonEditor {
                     match self.points[point_index].bezier_data_mut() {
                         Some(bd) => {
                             bd.update_inner_point_position(inner_point_index, pos);
-                            let same_pos = *self.points[point_index].pos();
-                            Point::update_position(&mut self.points, point_index, same_pos);
+                            let point_index = if inner_point_index == 0 {
+                                point_index
+                            } else {
+                                Point::get_next_index(&self.points, point_index)
+                            };
+                            Point::update_position_after_control_point_moved(
+                                &mut self.points,
+                                point_index,
+                                inner_point_index,
+                            )
                         }
 
                         None => eprintln!(

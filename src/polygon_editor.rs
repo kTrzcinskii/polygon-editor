@@ -263,7 +263,6 @@ impl PolygonEditor {
                                                 );
                                             self.points[selected_id]
                                                 .init_bezier_data(initial_points);
-                                            self.points[selected_id].apply_G0();
                                             let same_pos = *self.points[selected_id].pos();
                                             Point::update_position(
                                                 &mut self.points,
@@ -285,7 +284,6 @@ impl PolygonEditor {
                                             .clicked()
                                         {
                                             self.points[selected_id].apply_horizontal_constraint();
-                                            self.points[selected_id].apply_G0();
                                             let same_pos = *self.points[selected_id].pos();
                                             Point::update_position(
                                                 &mut self.points,
@@ -307,7 +305,6 @@ impl PolygonEditor {
                                             .clicked()
                                         {
                                             self.points[selected_id].apply_vertical_constraint();
-                                            self.points[selected_id].apply_G0();
                                             let same_pos = *self.points[selected_id].pos();
                                             Point::update_position(
                                                 &mut self.points,

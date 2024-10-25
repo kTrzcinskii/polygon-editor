@@ -341,7 +341,6 @@ impl PolygonEditor {
                                                 self.popups.const_width_constraint_user_input();
                                             self.points[selected_id]
                                                 .apply_width_constraint(new_width);
-                                            self.points[selected_id].apply_G0();
                                             let same_pos = *self.points[selected_id].pos();
                                             Point::update_position(
                                                 &mut self.points,

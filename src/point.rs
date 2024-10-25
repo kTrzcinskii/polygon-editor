@@ -163,7 +163,14 @@ impl Point {
             0,
             direction,
         );
-        Self::adjust_adjacent_edges_after_position_update(points, point_index);
+        match direction {
+            UpdateDirection::Left => {
+                Self::adjust_adjacent_edges_after_position_update(points, point_index)
+            }
+            UpdateDirection::Right => {
+                Self::adjust_adjacent_edges_after_position_update_right_first(points, point_index)
+            }
+        }
     }
 
     pub fn update_position_after_control_point_moved(
@@ -266,7 +273,9 @@ impl Point {
         *bezier_data.inner_points_mut() = new_inner_points;
         match points[point_index].continuity_type() {
             ContinuityType::G0 => {}
-            ContinuityType::C1 => todo!(),
+            ContinuityType::C1 => {
+                Self::adjust_c1_continuity(points, point_index, update_direction);
+            }
             ContinuityType::G1 => {
                 Self::adjust_g1_coninuity(points, point_index, update_direction);
             }
@@ -296,7 +305,9 @@ impl Point {
         *bezier_data.inner_points_mut() = new_inner_points;
         match points[point_index].continuity_type() {
             ContinuityType::G0 => {}
-            ContinuityType::C1 => todo!(),
+            ContinuityType::C1 => {
+                Self::adjust_c1_continuity(points, point_index, update_direction);
+            }
             ContinuityType::G1 => {
                 Self::adjust_g1_coninuity(points, point_index, update_direction);
             }
@@ -352,16 +363,16 @@ impl Point {
         let previous_point = Self::get_previous_index(points, point_index);
         let next_point = Self::get_next_index(points, point_index);
 
-        let has_right_constraint = points[point_index].has_horizontal_or_vertical_constraint();
-        let has_left_constraint = points[previous_point].has_horizontal_or_vertical_constraint();
+        // let has_right_constraint = points[point_index].has_horizontal_or_vertical_constraint();
+        // let has_left_constraint = points[previous_point].has_horizontal_or_vertical_constraint();
 
-        let update_direction = match (has_left_constraint, has_right_constraint) {
-            // in that case none of them is bezier segment
-            (true, true) => return,
-            (true, false) => UpdateDirection::Right,
-            (false, true) => UpdateDirection::Left,
-            (false, false) => update_direction,
-        };
+        // let update_direction = match (has_left_constraint, has_right_constraint) {
+        //     // in that case none of them is bezier segment
+        //     (true, true) => return,
+        //     (true, false) => UpdateDirection::Right,
+        //     (false, true) => UpdateDirection::Left,
+        //     (false, false) => update_direction,
+        // };
 
         match update_direction {
             UpdateDirection::Left => {
@@ -409,8 +420,106 @@ impl Point {
         }
     }
 
-    // TODO:
-    // - should properly handle C1
+    fn new_position_for_adjusting_c1_continuity(
+        coninuity_point: Pos2,
+        end_to_stay: Pos2,
+        end_to_preserve_length: Pos2,
+        scale: f32,
+    ) -> Pos2 {
+        let unchanged_vector = end_to_stay - coninuity_point;
+        let vector_length = end_to_preserve_length.distance(coninuity_point) * scale;
+        coninuity_point - unchanged_vector.normalized() * vector_length
+    }
+
+    fn adjust_c1_continuity(
+        points: &mut [Point],
+        point_index: usize,
+        update_direction: UpdateDirection,
+    ) {
+        #[cfg(feature = "show_debug_info")]
+        println!(
+            "Adjusting C1 coninuity in {} (direction: {:?})",
+            point_index, update_direction
+        );
+
+        let previous_point = Self::get_previous_index(points, point_index);
+        let next_point = Self::get_next_index(points, point_index);
+
+        // let has_right_constraint = points[point_index].has_horizontal_or_vertical_constraint();
+        // let has_right_const_constraint = points[point_index].has_width_constraint();
+
+        // let has_left_constraint = points[previous_point].has_horizontal_or_vertical_constraint();
+        // let has_left_const_constraint = points[previous_point].has_width_constraint();
+
+        // let update_direction = match (has_left_constraint, has_right_constraint) {
+        //     // in that case none of them is bezier segment
+        //     (true, true) => return,
+        //     (true, false) => UpdateDirection::Right,
+        //     (false, true) => UpdateDirection::Left,
+        //     (false, false) => update_direction,
+        // };
+
+        match update_direction {
+            UpdateDirection::Left => {
+                let (end_to_stay, is_end_to_stay_bezier) = match points[point_index].bezier_data() {
+                    Some(bs) => (bs.inner_points()[0], true),
+                    None => (*points[next_point].pos(), false),
+                };
+
+                let is_end_to_update_bezier = points[previous_point].bezier_data().is_some();
+
+                let scale = match (is_end_to_stay_bezier, is_end_to_update_bezier) {
+                    (true, true) => 1.0,
+                    (true, false) => 3.0,
+                    (false, true) => 1.0 / 3.0,
+                    (false, false) => panic!("One of them should be bezier"),
+                };
+
+                let new_position = Self::new_position_for_adjusting_c1_continuity(
+                    *points[point_index].pos(),
+                    end_to_stay,
+                    end_to_stay,
+                    scale,
+                );
+
+                match points[previous_point].bezier_data_mut() {
+                    Some(bs) => bs.update_inner_point_position(1, new_position),
+                    None => *points[previous_point].pos_mut() = new_position,
+                }
+            }
+            UpdateDirection::Right => {
+                let (end_to_stay, is_end_to_stay_bezier) = match points[previous_point].bezier_data
+                {
+                    Some(bs) => (bs.inner_points()[1], true),
+                    None => (*points[previous_point].pos(), false),
+                };
+
+                let is_end_to_update_bezier = points[point_index].bezier_data().is_some();
+
+                let scale = match (is_end_to_stay_bezier, is_end_to_update_bezier) {
+                    (true, true) => 1.0,
+                    (true, false) => 3.0,
+                    (false, true) => 1.0 / 3.0,
+                    (false, false) => panic!("One of them should be bezier"),
+                };
+
+                let new_position = Self::new_position_for_adjusting_c1_continuity(
+                    *points[point_index].pos(),
+                    end_to_stay,
+                    end_to_stay,
+                    scale,
+                );
+
+                match points[point_index].bezier_data_mut() {
+                    Some(bs) => bs.update_inner_point_position(0, new_position),
+                    None => *points[next_point].pos_mut() = new_position,
+                }
+            }
+        };
+    }
+
+    // FIXME: both C1 and G1 dont work properly with vertical and horizontal constraint,
+    // additionaly C1 doesnt work with const width constraint
     fn adjust_adjacent_edges_after_position_update(points: &mut [Point], point_index: usize) {
         #[cfg(feature = "show_debug_info")]
         {

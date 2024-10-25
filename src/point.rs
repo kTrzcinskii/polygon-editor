@@ -9,7 +9,7 @@ pub enum EdgeConstraint {
     ConstWidth(i32),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ContinuityType {
     G0,
     C1,
@@ -89,10 +89,6 @@ impl Point {
         }
     }
 
-    pub fn has_horizontal_or_vertical_constraint(&self) -> bool {
-        self.has_horizontal_constraint() || self.has_vertical_constraint()
-    }
-
     pub fn is_start_of_bezier_segment(&self) -> bool {
         self.bezier_data.is_some()
     }
@@ -150,7 +146,6 @@ impl Point {
     }
 
     pub fn update_position(points: &mut [Point], point_index: usize, new_position: Pos2) {
-        let previous_position = *points[point_index].pos();
         points[point_index].pos = new_position;
         let direction = match points[point_index].is_start_of_bezier_segment() {
             true => UpdateDirection::Left,
@@ -159,10 +154,16 @@ impl Point {
         Self::adjust_adjacent_bezier_segments_control_points(
             points,
             point_index,
-            previous_position,
             0,
-            direction,
+            UpdateDirection::Left,
         );
+        Self::adjust_adjacent_bezier_segments_control_points(
+            points,
+            point_index,
+            0,
+            UpdateDirection::Right,
+        );
+
         match direction {
             UpdateDirection::Left => {
                 Self::adjust_adjacent_edges_after_position_update(points, point_index)
@@ -178,16 +179,57 @@ impl Point {
         point_index: usize,
         inner_point_index: usize,
     ) {
-        let previous_position = *points[point_index].pos();
         let direction = match inner_point_index {
             0 => UpdateDirection::Left,
             1 => UpdateDirection::Right,
             _ => panic!("Invalid inner_point_index"),
         };
+
+        match inner_point_index {
+            0 => {
+                let previous_index = Self::get_previous_index(points, point_index);
+                let c = *points[point_index].continuity_type();
+                if c != ContinuityType::G0 {
+                    if let Some(constraint) = points[previous_index].constraint() {
+                        let inner_point =
+                            points[point_index].bezier_data().unwrap().inner_points()[0];
+                        match constraint {
+                            EdgeConstraint::Horizontal => {
+                                points[point_index].pos_mut().y = inner_point.y;
+                            }
+                            EdgeConstraint::Vertical => {
+                                points[point_index].pos_mut().x = inner_point.x;
+                            }
+                            EdgeConstraint::ConstWidth(_) => {}
+                        }
+                    };
+                }
+            }
+            1 => {
+                let next_index = Self::get_next_index(points, point_index);
+                let c = *points[next_index].continuity_type();
+                if c != ContinuityType::G0 {
+                    if let Some(constraint) = points[next_index].constraint() {
+                        let inner_point =
+                            points[point_index].bezier_data().unwrap().inner_points()[1];
+                        match constraint {
+                            EdgeConstraint::Horizontal => {
+                                points[next_index].pos_mut().y = inner_point.y;
+                            }
+                            EdgeConstraint::Vertical => {
+                                points[next_index].pos_mut().x = inner_point.x;
+                            }
+                            EdgeConstraint::ConstWidth(_) => {}
+                        }
+                    };
+                }
+            }
+            _ => panic!("Invalid inner_point_index"),
+        };
+
         Self::adjust_adjacent_bezier_segments_control_points(
             points,
             point_index,
-            previous_position,
             inner_point_index,
             direction,
         );
@@ -204,17 +246,18 @@ impl Point {
     fn adjust_adjacent_bezier_segments_control_points(
         points: &mut [Point],
         point_index: usize,
-        previous_position: Pos2,
         moved_control_point_id: usize,
         update_direction: UpdateDirection,
     ) {
+        #[cfg(feature = "show_debug_info")]
+        println!("Adjusting bezier segments control point in {point_index}");
+
         match moved_control_point_id {
             0 => {
                 if Self::is_end_of_bezier_segment(points, point_index) {
                     Self::adjust_bezier_segment_control_points_from_end(
                         points,
                         point_index,
-                        previous_position,
                         update_direction,
                     );
                 }
@@ -223,7 +266,6 @@ impl Point {
                     Self::adjust_bezier_segment_control_points_from_start(
                         points,
                         point_index,
-                        previous_position,
                         update_direction,
                     );
                 }
@@ -233,7 +275,6 @@ impl Point {
                     Self::adjust_bezier_segment_control_points_from_start(
                         points,
                         point_index,
-                        previous_position,
                         update_direction,
                     );
                 }
@@ -241,7 +282,6 @@ impl Point {
                     Self::adjust_bezier_segment_control_points_from_end(
                         points,
                         point_index,
-                        previous_position,
                         update_direction,
                     );
                 }
@@ -253,24 +293,8 @@ impl Point {
     fn adjust_bezier_segment_control_points_from_start(
         points: &mut [Point],
         point_index: usize,
-        previous_position: Pos2,
         update_direction: UpdateDirection,
     ) {
-        let bezier_data = points[point_index].bezier_data().expect(
-            "This function should only be called for point which is the start of bezier segment",
-        );
-        let inner_points = *bezier_data.inner_points();
-        let end_index = Self::get_next_index(points, point_index);
-        let new_inner_points = Self::scale_and_rotate_bezier(
-            &previous_position,
-            points[point_index].pos(),
-            &inner_points,
-            points[end_index].pos(),
-        );
-        let bezier_data = points[point_index]
-            .bezier_data_mut()
-            .expect("Should never happen after first check");
-        *bezier_data.inner_points_mut() = new_inner_points;
         match points[point_index].continuity_type() {
             ContinuityType::G0 => {}
             ContinuityType::C1 => {
@@ -285,24 +309,8 @@ impl Point {
     fn adjust_bezier_segment_control_points_from_end(
         points: &mut [Point],
         point_index: usize,
-        previous_position: Pos2,
         update_direction: UpdateDirection,
     ) {
-        let start_index = Self::get_previous_index(points, point_index);
-        let bezier_data = points[start_index].bezier_data().expect(
-            "This function should only be called for point which is the end of bezier segment",
-        );
-        let inner_points = *bezier_data.inner_points();
-        let new_inner_points = Self::scale_and_rotate_bezier(
-            &previous_position,
-            &points[point_index].pos,
-            &inner_points,
-            points[start_index].pos(),
-        );
-        let bezier_data = points[start_index]
-            .bezier_data_mut()
-            .expect("Should never happen after first check");
-        *bezier_data.inner_points_mut() = new_inner_points;
         match points[point_index].continuity_type() {
             ContinuityType::G0 => {}
             ContinuityType::C1 => {
@@ -312,31 +320,6 @@ impl Point {
                 Self::adjust_g1_coninuity(points, point_index, update_direction);
             }
         }
-    }
-
-    fn scale_and_rotate_bezier(
-        previous_position: &Pos2,
-        current_position: &Pos2,
-        inner_points: &[Pos2; 2],
-        end_not_moved: &Pos2,
-    ) -> [Pos2; 2] {
-        let initial_distance = previous_position.distance(*end_not_moved);
-        let new_distance = current_position.distance(*end_not_moved);
-        let scale = new_distance / initial_distance;
-        let new_angle = (*current_position - *end_not_moved).angle();
-        let previos_angle = (*previous_position - *end_not_moved).angle();
-        let angle_diff = new_angle - previos_angle;
-        let c0_new_angle = (inner_points[0] - *end_not_moved).angle() + angle_diff;
-        let new_c0 =
-            (Vec2::angled(c0_new_angle) * (inner_points[0] - *end_not_moved).length() * scale)
-                .to_pos2()
-                + end_not_moved.to_vec2();
-        let c1_new_angle = (inner_points[1] - *end_not_moved).angle() + angle_diff;
-        let new_c1 =
-            (Vec2::angled(c1_new_angle) * (inner_points[1] - *end_not_moved).length() * scale)
-                .to_pos2()
-                + end_not_moved.to_vec2();
-        [new_c0, new_c1]
     }
 
     fn new_position_for_adjusting_g1_continuity(
@@ -363,19 +346,26 @@ impl Point {
         let previous_point = Self::get_previous_index(points, point_index);
         let next_point = Self::get_next_index(points, point_index);
 
-        // let has_right_constraint = points[point_index].has_horizontal_or_vertical_constraint();
-        // let has_left_constraint = points[previous_point].has_horizontal_or_vertical_constraint();
-
-        // let update_direction = match (has_left_constraint, has_right_constraint) {
-        //     // in that case none of them is bezier segment
-        //     (true, true) => return,
-        //     (true, false) => UpdateDirection::Right,
-        //     (false, true) => UpdateDirection::Left,
-        //     (false, false) => update_direction,
-        // };
+        let continuity_point = *points[point_index].pos();
 
         match update_direction {
             UpdateDirection::Left => {
+                let c = points[point_index]
+                    .constraint()
+                    .unwrap_or(EdgeConstraint::ConstWidth(0));
+
+                match c {
+                    EdgeConstraint::Horizontal => match points[point_index].bezier_data_mut() {
+                        Some(bs) => bs.inner_points_mut()[0].y = continuity_point.y,
+                        None => points[next_point].pos_mut().y = continuity_point.y,
+                    },
+                    EdgeConstraint::Vertical => match points[point_index].bezier_data_mut() {
+                        Some(bs) => bs.inner_points_mut()[0].x = continuity_point.x,
+                        None => points[next_point].pos_mut().x = continuity_point.x,
+                    },
+                    EdgeConstraint::ConstWidth(_) => {}
+                }
+
                 let end_to_stay = match points[point_index].bezier_data() {
                     Some(bs) => bs.inner_points()[0],
                     None => *points[next_point].pos(),
@@ -386,7 +376,7 @@ impl Point {
                 };
 
                 let new_position = Self::new_position_for_adjusting_g1_continuity(
-                    *points[point_index].pos(),
+                    continuity_point,
                     end_to_stay,
                     end_to_update,
                 );
@@ -397,6 +387,22 @@ impl Point {
                 }
             }
             UpdateDirection::Right => {
+                let c = points[point_index]
+                    .constraint()
+                    .unwrap_or(EdgeConstraint::ConstWidth(0));
+
+                match c {
+                    EdgeConstraint::Horizontal => match points[previous_point].bezier_data_mut() {
+                        Some(bs) => bs.inner_points_mut()[1].y = continuity_point.y,
+                        None => points[previous_point].pos_mut().y = continuity_point.y,
+                    },
+                    EdgeConstraint::Vertical => match points[previous_point].bezier_data_mut() {
+                        Some(bs) => bs.inner_points_mut()[1].x = continuity_point.x,
+                        None => points[previous_point].pos_mut().x = continuity_point.x,
+                    },
+                    EdgeConstraint::ConstWidth(_) => {}
+                }
+
                 let end_to_stay = match points[previous_point].bezier_data {
                     Some(bs) => bs.inner_points()[1],
                     None => *points[previous_point].pos(),
@@ -407,7 +413,7 @@ impl Point {
                 };
 
                 let new_position = Self::new_position_for_adjusting_g1_continuity(
-                    *points[point_index].pos(),
+                    continuity_point,
                     end_to_stay,
                     end_to_update,
                 );
@@ -445,22 +451,26 @@ impl Point {
         let previous_point = Self::get_previous_index(points, point_index);
         let next_point = Self::get_next_index(points, point_index);
 
-        // let has_right_constraint = points[point_index].has_horizontal_or_vertical_constraint();
-        // let has_right_const_constraint = points[point_index].has_width_constraint();
-
-        // let has_left_constraint = points[previous_point].has_horizontal_or_vertical_constraint();
-        // let has_left_const_constraint = points[previous_point].has_width_constraint();
-
-        // let update_direction = match (has_left_constraint, has_right_constraint) {
-        //     // in that case none of them is bezier segment
-        //     (true, true) => return,
-        //     (true, false) => UpdateDirection::Right,
-        //     (false, true) => UpdateDirection::Left,
-        //     (false, false) => update_direction,
-        // };
+        let continuity_point = *points[point_index].pos();
 
         match update_direction {
             UpdateDirection::Left => {
+                let c = points[point_index]
+                    .constraint()
+                    .unwrap_or(EdgeConstraint::ConstWidth(0));
+
+                match c {
+                    EdgeConstraint::Horizontal => match points[point_index].bezier_data_mut() {
+                        Some(bs) => bs.inner_points_mut()[0].y = continuity_point.y,
+                        None => points[next_point].pos_mut().y = continuity_point.y,
+                    },
+                    EdgeConstraint::Vertical => match points[point_index].bezier_data_mut() {
+                        Some(bs) => bs.inner_points_mut()[0].x = continuity_point.x,
+                        None => points[next_point].pos_mut().x = continuity_point.x,
+                    },
+                    EdgeConstraint::ConstWidth(_) => {}
+                }
+
                 let (end_to_stay, is_end_to_stay_bezier) = match points[point_index].bezier_data() {
                     Some(bs) => (bs.inner_points()[0], true),
                     None => (*points[next_point].pos(), false),
@@ -476,7 +486,7 @@ impl Point {
                 };
 
                 let new_position = Self::new_position_for_adjusting_c1_continuity(
-                    *points[point_index].pos(),
+                    continuity_point,
                     end_to_stay,
                     end_to_stay,
                     scale,
@@ -488,6 +498,22 @@ impl Point {
                 }
             }
             UpdateDirection::Right => {
+                let c = points[point_index]
+                    .constraint()
+                    .unwrap_or(EdgeConstraint::ConstWidth(0));
+
+                match c {
+                    EdgeConstraint::Horizontal => match points[previous_point].bezier_data_mut() {
+                        Some(bs) => bs.inner_points_mut()[1].y = continuity_point.y,
+                        None => points[previous_point].pos_mut().y = continuity_point.y,
+                    },
+                    EdgeConstraint::Vertical => match points[previous_point].bezier_data_mut() {
+                        Some(bs) => bs.inner_points_mut()[1].x = continuity_point.x,
+                        None => points[previous_point].pos_mut().x = continuity_point.x,
+                    },
+                    EdgeConstraint::ConstWidth(_) => {}
+                }
+
                 let (end_to_stay, is_end_to_stay_bezier) = match points[previous_point].bezier_data
                 {
                     Some(bs) => (bs.inner_points()[1], true),
@@ -504,7 +530,7 @@ impl Point {
                 };
 
                 let new_position = Self::new_position_for_adjusting_c1_continuity(
-                    *points[point_index].pos(),
+                    continuity_point,
                     end_to_stay,
                     end_to_stay,
                     scale,
@@ -518,8 +544,7 @@ impl Point {
         };
     }
 
-    // FIXME: both C1 and G1 dont work properly with vertical and horizontal constraint,
-    // additionaly C1 doesnt work with const width constraint
+    // FIXME: C1 doesnt work with const width constraint
     fn adjust_adjacent_edges_after_position_update(points: &mut [Point], point_index: usize) {
         #[cfg(feature = "show_debug_info")]
         {
@@ -560,6 +585,13 @@ impl Point {
             && !Self::is_part_of_bezier_segment(points, left)
             && !Self::is_part_of_bezier_segment(points, Self::get_previous_index(points, left));
 
+        Self::adjust_adjacent_bezier_segments_control_points(
+            points,
+            point_index,
+            0,
+            UpdateDirection::Left,
+        );
+
         #[allow(unused_variables)]
         let mut i_left = 0;
         while !left_stop {
@@ -597,6 +629,13 @@ impl Point {
             && !Self::is_part_of_bezier_segment(points, right)
             && !Self::is_part_of_bezier_segment(points, Point::get_next_index(points, right));
 
+        Self::adjust_adjacent_bezier_segments_control_points(
+            points,
+            point_index,
+            1,
+            UpdateDirection::Right,
+        );
+
         #[allow(unused_variables)]
         let mut i_right = 0;
         while !right_stop {
@@ -629,13 +668,15 @@ impl Point {
     }
 
     fn adjust_moved_point_edge_start(points: &mut [Point], edge_start_index: usize) {
+        #[cfg(feature = "show_debug_info")]
+        println!("Adjusting point {edge_start_index} from start");
+
         let constraint = *points[edge_start_index].constraint();
         let edge_end_index = Self::get_next_index(points, edge_start_index);
-        let previous_pos = *points[edge_end_index].pos();
         if let Some(constraint) = constraint {
             #[cfg(feature = "show_debug_info")]
             println!(
-                "Adjust edge (from start point): {}-{}",
+                "Applying constriaint (from start point): {}-{}",
                 edge_start_index, edge_end_index
             );
             Self::apply_constraint_diff(points, edge_end_index, edge_start_index, &constraint);
@@ -643,20 +684,21 @@ impl Point {
         Self::adjust_adjacent_bezier_segments_control_points(
             points,
             edge_end_index,
-            previous_pos,
             0,
             UpdateDirection::Right,
         );
     }
 
     fn adjust_moved_point_edge_end(points: &mut [Point], edge_end_index: usize) {
+        #[cfg(feature = "show_debug_info")]
+        println!("Adjusting point {edge_end_index} from end");
+
         let edge_start_index = Self::get_previous_index(points, edge_end_index);
         let constraint = *points[edge_start_index].constraint();
-        let previous_pos = *points[edge_start_index].pos();
         if let Some(constraint) = constraint {
             #[cfg(feature = "show_debug_info")]
             println!(
-                "Adjust edge (from end point): {}-{}",
+                "Applying constraint on edge (from end point): {}-{}",
                 edge_start_index, edge_end_index
             );
             Self::apply_constraint_diff(points, edge_start_index, edge_end_index, &constraint);
@@ -664,7 +706,6 @@ impl Point {
         Self::adjust_adjacent_bezier_segments_control_points(
             points,
             edge_start_index,
-            previous_pos,
             0,
             UpdateDirection::Left,
         );

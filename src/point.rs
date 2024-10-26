@@ -511,7 +511,18 @@ impl Point {
                         Some(bs) => bs.inner_points_mut()[1].x = continuity_point.x,
                         None => points[previous_point].pos_mut().x = continuity_point.x,
                     },
-                    EdgeConstraint::ConstWidth(_) => {}
+                    EdgeConstraint::ConstWidth(w) => {
+                        if w > 0 {
+                            if let Some(bs) = points[previous_point].bezier_data_mut() {
+                                let new_position = Self::calculate_position_for_keeping_width(
+                                    w as f32 * 1.0 / 3.0,
+                                    continuity_point,
+                                    bs.inner_points()[1],
+                                );
+                                bs.update_inner_point_position(1, new_position);
+                            }
+                        }
+                    }
                 }
 
                 let (end_to_stay, is_end_to_stay_bezier) = match points[previous_point].bezier_data
@@ -544,7 +555,6 @@ impl Point {
         };
     }
 
-    // FIXME: C1 doesnt work with const width constraint
     fn adjust_adjacent_edges_after_position_update(points: &mut [Point], point_index: usize) {
         #[cfg(feature = "show_debug_info")]
         {
@@ -557,6 +567,9 @@ impl Point {
 
         Self::adjust_adjacent_edges_after_position_update_only_left(points, point_index);
         Self::adjust_adjacent_edges_after_position_update_only_right(points, point_index);
+
+        #[cfg(feature = "show_debug_info")]
+        println!("================================================");
     }
 
     fn adjust_adjacent_edges_after_position_update_right_first(
@@ -574,6 +587,9 @@ impl Point {
 
         Self::adjust_adjacent_edges_after_position_update_only_right(points, point_index);
         Self::adjust_adjacent_edges_after_position_update_only_left(points, point_index);
+
+        #[cfg(feature = "show_debug_info")]
+        println!("================================================");
     }
 
     fn adjust_adjacent_edges_after_position_update_only_left(
@@ -725,15 +741,26 @@ impl Point {
                 points[point_index].pos_mut().x = points[other_edge_end_index].pos().x;
             }
             EdgeConstraint::ConstWidth(width) => {
-                let angle_between = (points[point_index].pos().y
-                    - points[other_edge_end_index].pos().y)
-                    .atan2(points[point_index].pos().x - points[other_edge_end_index].pos().x);
-                let new_position = Pos2 {
-                    x: points[other_edge_end_index].pos().x + *width as f32 * angle_between.cos(),
-                    y: points[other_edge_end_index].pos().y + *width as f32 * angle_between.sin(),
-                };
+                let new_position = Self::calculate_position_for_keeping_width(
+                    *width as f32,
+                    *points[other_edge_end_index].pos(),
+                    *points[point_index].pos(),
+                );
                 *points[point_index].pos_mut() = new_position;
             }
+        }
+    }
+
+    fn calculate_position_for_keeping_width(
+        width: f32,
+        pos_to_stay: Pos2,
+        pos_to_update: Pos2,
+    ) -> Pos2 {
+        let angle_between =
+            (pos_to_update.y - pos_to_stay.y).atan2(pos_to_update.x - pos_to_stay.x);
+        Pos2 {
+            x: pos_to_stay.x + width * angle_between.cos(),
+            y: pos_to_stay.y + width * angle_between.sin(),
         }
     }
 

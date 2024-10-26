@@ -40,7 +40,7 @@ impl Point {
             pos,
             constraint: None,
             bezier_data: None,
-            continuity_type: ContinuityType::G0,
+            continuity_type: ContinuityType::C1,
         }
     }
 

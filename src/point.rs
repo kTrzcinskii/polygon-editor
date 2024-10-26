@@ -82,13 +82,6 @@ impl Point {
         }
     }
 
-    pub fn has_width_constraint(&self) -> bool {
-        match self.constraint() {
-            Some(res) => matches!(res, EdgeConstraint::ConstWidth(_)),
-            None => false,
-        }
-    }
-
     pub fn is_start_of_bezier_segment(&self) -> bool {
         self.bezier_data.is_some()
     }
@@ -597,10 +590,6 @@ impl Point {
         point_index: usize,
     ) {
         let mut left = point_index;
-        let mut left_stop = !points[Self::get_previous_index(points, left)].has_constraint()
-            && !Self::is_part_of_bezier_segment(points, left)
-            && !Self::is_part_of_bezier_segment(points, Self::get_previous_index(points, left));
-
         Self::adjust_adjacent_bezier_segments_control_points(
             points,
             point_index,
@@ -608,31 +597,9 @@ impl Point {
             UpdateDirection::Left,
         );
 
-        #[allow(unused_variables)]
-        let mut i_left = 0;
-        while !left_stop {
-            #[cfg(feature = "show_debug_info")]
-            println!("Step: {}, Left: {}", i_left, left);
-            if Self::get_previous_index(points, left) == point_index {
-                break;
-            }
+        while Self::get_previous_index(points, left) != point_index {
             Self::adjust_moved_point_edge_end(points, left);
             left = Self::get_previous_index(points, left);
-            let next_edge_start = Self::get_previous_index(points, left);
-            let constraint_and_next_width_constraint =
-                points[left].has_constraint() && points[next_edge_start].has_width_constraint();
-            let width_contraint_and_next_constraint =
-                points[left].has_width_constraint() && points[next_edge_start].has_constraint();
-            let is_bezier_segment = Self::is_part_of_bezier_segment(points, left);
-            if !constraint_and_next_width_constraint
-                && !width_contraint_and_next_constraint
-                && !is_bezier_segment
-            {
-                #[cfg(feature = "show_debug_info")]
-                println!("Left stops at: {}", left);
-                left_stop = true;
-            }
-            i_left += 1;
         }
     }
 
@@ -641,10 +608,6 @@ impl Point {
         point_index: usize,
     ) {
         let mut right = point_index;
-        let mut right_stop = !points[right].has_constraint()
-            && !Self::is_part_of_bezier_segment(points, right)
-            && !Self::is_part_of_bezier_segment(points, Point::get_next_index(points, right));
-
         Self::adjust_adjacent_bezier_segments_control_points(
             points,
             point_index,
@@ -652,34 +615,9 @@ impl Point {
             UpdateDirection::Right,
         );
 
-        #[allow(unused_variables)]
-        let mut i_right = 0;
-        while !right_stop {
-            #[cfg(feature = "show_debug_info")]
-            println!("Step: {}, Right: {}", i_right, right);
-
-            if Self::get_next_index(points, right) == point_index {
-                break;
-            }
-
+        while Self::get_next_index(points, right) != point_index {
             Self::adjust_moved_point_edge_start(points, right);
-            let current_edge_index = right;
             right = Self::get_next_index(points, right);
-            let constraint_and_next_width_constraint =
-                points[current_edge_index].has_constraint() && points[right].has_width_constraint();
-            let width_contraint_and_next_constraint =
-                points[current_edge_index].has_width_constraint() && points[right].has_constraint();
-            let is_bezier_segment = Self::is_part_of_bezier_segment(points, current_edge_index);
-
-            if !constraint_and_next_width_constraint
-                && !width_contraint_and_next_constraint
-                && !is_bezier_segment
-            {
-                #[cfg(feature = "show_debug_info")]
-                println!("Right stops at: {}", right);
-                right_stop = true;
-            }
-            i_right += 1;
         }
     }
 

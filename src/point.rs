@@ -140,16 +140,33 @@ impl Point {
 
     pub fn update_position(points: &mut [Point], point_index: usize, new_position: Pos2) {
         points[point_index].pos = new_position;
-        let direction = match points[point_index].is_start_of_bezier_segment() {
-            true => UpdateDirection::Left,
-            false => UpdateDirection::Right,
+        let direction = if points[point_index].is_start_of_bezier_segment()
+            || points[Self::get_previous_index(points, point_index)].has_constraint()
+        {
+            UpdateDirection::Left
+        } else {
+            UpdateDirection::Right
         };
+        let previous_index = Self::get_previous_index(points, point_index);
+        let c_previous = *points[previous_index].constraint();
+        if let Some(c) = c_previous {
+            Self::apply_constraint_diff(points, previous_index, point_index, &c);
+        }
         Self::adjust_adjacent_bezier_segments_control_points(
             points,
-            point_index,
-            0,
+            previous_index,
+            1,
             UpdateDirection::Left,
         );
+        let c_next = *points[point_index].constraint();
+        if let Some(c) = c_next {
+            Self::apply_constraint_diff(
+                points,
+                Self::get_next_index(points, point_index),
+                point_index,
+                &c,
+            );
+        }
         Self::adjust_adjacent_bezier_segments_control_points(
             points,
             point_index,
@@ -598,8 +615,13 @@ impl Point {
         );
 
         while Self::get_previous_index(points, left) != point_index {
-            Self::adjust_moved_point_edge_end(points, left);
-            left = Self::get_previous_index(points, left);
+            let previous = Self::get_previous_index(points, left);
+            Self::adjust_moved_point_edge_end(
+                points,
+                left,
+                Self::get_previous_index(points, previous) != point_index || points.len() == 3,
+            );
+            left = previous;
         }
     }
 
@@ -616,12 +638,21 @@ impl Point {
         );
 
         while Self::get_next_index(points, right) != point_index {
-            Self::adjust_moved_point_edge_start(points, right);
-            right = Self::get_next_index(points, right);
+            let next = Self::get_next_index(points, right);
+            Self::adjust_moved_point_edge_start(
+                points,
+                right,
+                Self::get_next_index(points, next) != point_index || points.len() == 3,
+            );
+            right = next;
         }
     }
 
-    fn adjust_moved_point_edge_start(points: &mut [Point], edge_start_index: usize) {
+    fn adjust_moved_point_edge_start(
+        points: &mut [Point],
+        edge_start_index: usize,
+        adjust_bezier: bool,
+    ) {
         #[cfg(feature = "show_debug_info")]
         println!("Adjusting point {edge_start_index} from start");
 
@@ -635,15 +666,21 @@ impl Point {
             );
             Self::apply_constraint_diff(points, edge_end_index, edge_start_index, &constraint);
         }
-        Self::adjust_adjacent_bezier_segments_control_points(
-            points,
-            edge_end_index,
-            0,
-            UpdateDirection::Right,
-        );
+        if adjust_bezier {
+            Self::adjust_adjacent_bezier_segments_control_points(
+                points,
+                edge_end_index,
+                0,
+                UpdateDirection::Right,
+            );
+        }
     }
 
-    fn adjust_moved_point_edge_end(points: &mut [Point], edge_end_index: usize) {
+    fn adjust_moved_point_edge_end(
+        points: &mut [Point],
+        edge_end_index: usize,
+        adjust_bezier: bool,
+    ) {
         #[cfg(feature = "show_debug_info")]
         println!("Adjusting point {edge_end_index} from end");
 
@@ -657,12 +694,14 @@ impl Point {
             );
             Self::apply_constraint_diff(points, edge_start_index, edge_end_index, &constraint);
         }
-        Self::adjust_adjacent_bezier_segments_control_points(
-            points,
-            edge_start_index,
-            0,
-            UpdateDirection::Left,
-        );
+        if adjust_bezier {
+            Self::adjust_adjacent_bezier_segments_control_points(
+                points,
+                edge_start_index,
+                0,
+                UpdateDirection::Left,
+            );
+        }
     }
 
     fn apply_constraint_diff(

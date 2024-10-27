@@ -1,6 +1,11 @@
-use egui::{Color32, Pos2, Rounding, Vec2};
+use egui::{Color32, Pos2, Rounding, Vec2, Window};
 
-use crate::{drawer::Drawer, point::Point, popups::Popups};
+use crate::{
+    bezier::BezierData,
+    drawer::Drawer,
+    point::{ContinuityType, EdgeConstraint, Point},
+    popups::Popups,
+};
 
 #[derive(PartialEq)]
 enum LineDrawingAlgorithm {
@@ -33,6 +38,10 @@ pub struct PolygonEditor {
     selected_point_index: Option<usize>,
     /// Data related to all popups
     popups: Popups,
+    /// Whether to show window with tutorial
+    show_tutorial_window: bool,
+    /// Whether to show window with implementation
+    show_implementation_window: bool,
 }
 
 impl PolygonEditor {
@@ -161,7 +170,9 @@ impl PolygonEditor {
                         point_selected_now = true;
                         break;
                     }
-                    if Point::contains_point(&self.points, id, &pos) {
+                    if Point::contains_point(&self.points, id, &pos)
+                        && !self.points[id].is_start_of_bezier_segment()
+                    {
                         self.selected_edge_start_index = Some(id);
                         edge_selected_now = true;
                         break;
@@ -467,14 +478,145 @@ impl PolygonEditor {
                 });
         }
     }
+
+    pub fn show_tutorial(&mut self, ctx: &egui::Context) {
+        if self.show_tutorial_window {
+            Window::new("Tutorial")
+                .open(&mut self.show_tutorial_window)
+                .show(ctx, |ui| {
+                    ui.label("1. To move any point hold LMB and drag it.");
+                    ui.label("2. To add new point or apply any change to edge click RMB on the edge and choose proper option.");
+                    ui.label("3. To remove constraint from edge click RMB on the edge with constraint and choose \"Remove Constraint\"");
+                    ui.label("4. To apply continuity to the point click RMB on the point and choose proper continuity (default is C1).");
+                    ui.label("5. To remove bezier segment click RMB on the point that is the start of it and choose \"Remove bezier segment\"");
+                    ui.label("6. To move whole polygon hold ctrl + LMB and drag any point.");
+                    ui.label("7. To remove point click alt + LMB on it.");
+                    ui.label("8. To create new polygon click \"Draw new Polygon\" and click LMB in the next positions where point should be placed. Polygon will be created when there are at least 2 points and you click on the first point");
+                    ui.label("9. To restore the polygon that comes up when app is run click \"Restore default state\"");
+                    ui.separator();
+                    ui.label("LMB - left mouse button, RMB - right mouse button.");
+                });
+        }
+    }
+
+    pub fn show_implementation(&mut self, ctx: &egui::Context) {
+        if self.show_implementation_window {
+            Window::new("Implementation")
+                .open(&mut self.show_implementation_window)
+                .show(ctx, |ui| {
+                    ui.label("1. Application stores points as vector of points. Each edge is just points[i]-points[i+1] (with special case of points[n-1]-points[0]). When edge is needed (for example for selecting it with RMB or to check if edge has any constraint, it's identified by its first point, meaning if we want to know what costraint edge [i]-[i+1] has, we need to check point [i].");
+                    ui.label("2. When any point is moved, app iterates over all points in both directions (meaning it goes i, i+1,...i-1 and i, i-1,..., i+1. For each edge it checks if edge has any constraint and if so it properly moved other points so that every constraint is still satisfied.");
+                    ui.label("3. In case of bezier segment, it works very similiar to simple edge, e.g. when bezier segment is defined on edge [i]-[i+1], then control points are stored inside point [i].");
+                    ui.label("4. Constraints that are caused by continuity in points adjacent to bezier segments are checked in same iteration in which edge constraints are checked. After any point is moved, its adjacent control points are checked and if C1 or G1 is applied then they are properly moved to hold these constraints.");
+                });
+        }
+    }
 }
 
 impl Default for PolygonEditor {
     fn default() -> Self {
         let points = vec![
-            Point::new(Pos2::new(50.0, 50.0)),
-            Point::new(Pos2::new(100.0, 50.0)),
-            Point::new(Pos2::new(75.0, 100.0)),
+            // Point::new(Pos2::new(50.0, 50.0)),
+            // Point::new(Pos2::new(100.0, 50.0)),
+            // Point::new(Pos2::new(75.0, 100.0)),
+            Point::new_all(Pos2::new(118.8, 359.2), None, None, ContinuityType::C1),
+            Point::new_all(
+                Pos2::new(132.2, 439.5),
+                None,
+                Some(BezierData::new([
+                    Pos2::new(173.2, 493.4),
+                    Pos2::new(221.1, 492.4),
+                ])),
+                ContinuityType::G0,
+            ),
+            Point::new_all(Pos2::new(244.6, 449.1), None, None, ContinuityType::C1),
+            Point::new_all(Pos2::new(314.9, 319.0), None, None, ContinuityType::C1),
+            Point::new_all(
+                Pos2::new(362.4, 449.2),
+                None,
+                Some(BezierData::new([
+                    Pos2::new(378.3, 492.7),
+                    Pos2::new(430.5, 502.1),
+                ])),
+                ContinuityType::C1,
+            ),
+            Point::new_all(
+                Pos2::new(481.5, 451.3),
+                None,
+                Some(BezierData::new([
+                    Pos2::new(519.4, 413.6),
+                    Pos2::new(425.0, 419.1),
+                ])),
+                ContinuityType::G1,
+            ),
+            Point::new_all(
+                Pos2::new(425.0, 361.5),
+                Some(EdgeConstraint::Vertical),
+                None,
+                ContinuityType::G1,
+            ),
+            Point::new_all(
+                Pos2::new(425.0, 259.1),
+                Some(EdgeConstraint::ConstWidth(123)),
+                None,
+                ContinuityType::C1,
+            ),
+            Point::new_all(
+                Pos2::new(524.6, 187.0),
+                Some(EdgeConstraint::ConstWidth(107)),
+                None,
+                ContinuityType::C1,
+            ),
+            Point::new_all(
+                Pos2::new(494.6, 84.3),
+                Some(EdgeConstraint::Horizontal),
+                None,
+                ContinuityType::C1,
+            ),
+            Point::new_all(
+                Pos2::new(318.8, 84.3),
+                Some(EdgeConstraint::Vertical),
+                None,
+                ContinuityType::C1,
+            ),
+            Point::new_all(Pos2::new(318.8, 239.0), None, None, ContinuityType::C1),
+            Point::new_all(
+                Pos2::new(261.8, 89.8),
+                None,
+                Some(BezierData::new([
+                    Pos2::new(242.8, 40.0),
+                    Pos2::new(102.6, 81.6),
+                ])),
+                ContinuityType::C1,
+            ),
+            Point::new_all(
+                Pos2::new(145.4, 104.4),
+                None,
+                Some(BezierData::new([
+                    Pos2::new(188.2, 127.3),
+                    Pos2::new(125.8, 217.3),
+                ])),
+                ContinuityType::C1,
+            ),
+            Point::new_all(
+                Pos2::new(153.1, 217.3),
+                Some(EdgeConstraint::Horizontal),
+                None,
+                ContinuityType::C1,
+            ),
+            Point::new_all(Pos2::new(235.2, 217.3), None, None, ContinuityType::C1),
+            Point::new_all(
+                Pos2::new(110.8, 294.7),
+                Some(EdgeConstraint::ConstWidth(79)),
+                None,
+                ContinuityType::C1,
+            ),
+            Point::new_all(
+                Pos2::new(182.0, 329.0),
+                Some(EdgeConstraint::ConstWidth(70)),
+                None,
+                ContinuityType::C1,
+            ),
         ];
         Self {
             polygon_mode: PolygonMode::Editing,
@@ -486,6 +628,8 @@ impl Default for PolygonEditor {
             selected_edge_start_index: None,
             selected_point_index: None,
             popups: Popups::default(),
+            show_tutorial_window: false,
+            show_implementation_window: false,
         }
     }
 }
@@ -523,6 +667,18 @@ impl eframe::App for PolygonEditor {
                 ui.vertical_centered(|ui| {
                     if ui.button("Restore default state").clicked() {
                         *self = Self::default();
+                    }
+                });
+                ui.separator();
+                ui.vertical_centered(|ui| {
+                    if ui.button("Tutorial").clicked() {
+                        self.show_tutorial_window = true;
+                    }
+                });
+                ui.separator();
+                ui.vertical_centered(|ui| {
+                    if ui.button("Implementation").clicked() {
+                        self.show_implementation_window = true;
                     }
                 });
                 ui.separator();
@@ -596,6 +752,8 @@ impl eframe::App for PolygonEditor {
                     self.handle_selecting_edge_or_point(ctx);
                     self.show_context_menu_for_selected_edge(ctx, ui);
                     self.show_context_menu_for_selected_point(ctx);
+                    self.show_tutorial(ctx);
+                    self.show_implementation(ctx);
                 }
             }
         });

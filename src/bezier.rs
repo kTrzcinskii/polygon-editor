@@ -2,7 +2,7 @@ use egui::Pos2;
 
 use crate::point::Point;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct BezierData {
     inner_points: [Pos2; 2],
 }

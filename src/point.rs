@@ -2,14 +2,14 @@ use egui::{Pos2, Vec2};
 
 use crate::bezier::BezierData;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum EdgeConstraint {
     Horizontal,
     Vertical,
     ConstWidth(i32),
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContinuityType {
     G0,
     C1,
@@ -24,7 +24,7 @@ enum UpdateDirection {
 
 // Each point is at the same time start of some edge
 // Information about this edge are stored in this struct
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Point {
     pos: Pos2,
     /// Contraint that is applied to edge which starts in this point (and ends in the next one)
@@ -41,6 +41,20 @@ impl Point {
             constraint: None,
             bezier_data: None,
             continuity_type: ContinuityType::C1,
+        }
+    }
+
+    pub fn new_all(
+        pos: Pos2,
+        edge_constraint: Option<EdgeConstraint>,
+        bezier_data: Option<BezierData>,
+        continuity_type: ContinuityType,
+    ) -> Self {
+        Self {
+            pos,
+            constraint: edge_constraint,
+            bezier_data,
+            continuity_type,
         }
     }
 
@@ -778,6 +792,8 @@ impl Point {
         points[previous_index].remove_constraint();
         points[previous_index].remove_bezier_data();
         points.remove(point_index);
+        let pos = *points[point_index].pos();
+        Self::update_position(points, point_index, pos);
     }
 
     pub fn update_position_all(points: &mut [Point], diff: Vec2) {
@@ -803,7 +819,7 @@ impl Point {
         let min_y = start.y.min(end.y);
         let max_y = start.y.max(end.y);
 
-        if start.x == end.x
+        if (start.x - end.x).abs() <= TOLERANCE_SAME_DIM
             && (point.x - start.x).abs() <= TOLERANCE_SAME_DIM
             && point.y >= min_y
             && point.y <= max_y
@@ -811,7 +827,7 @@ impl Point {
             return true;
         }
 
-        if start.y == end.y
+        if (start.y - end.y).abs() <= TOLERANCE_SAME_DIM
             && (point.y - start.y).abs() <= TOLERANCE_SAME_DIM
             && point.x >= min_x
             && point.x <= max_x

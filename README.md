@@ -33,6 +33,6 @@ cargo run --release
 
 ## Examples
 
-![default screen](./examples/default-screen.png)
-![edges with constraints](./examples/edges_with_constraints.png)
-![circle-like shape](./examples/circle-like-shape.png)
+![default screen](examples/default-screen.png)
+![edges with constraints](examples/edges_with_constraints.png)
+![circle-like shape](examples/circle-like-shape.png)

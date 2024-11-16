@@ -1,6 +1,6 @@
 # Polygon Editor
 
-Polygon Editor is a GUI app made egui for "Computer Graphics 1" course.
+Polygon Editor is a GUI app made with egui for "Computer Graphics 1" course.
 It allows the user to draw a polygon consisting of an arbitrary number of points.
 Each edge of the polygon can have a constraint applied:
  - vertical
